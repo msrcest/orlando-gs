@@ -4,14 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Orlando Garage Store - POS & Inventory</title>
-  
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  
-  <!-- Babel Standalone untuk membaca JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <!-- Import Maps -->
   <script type="importmap">
     {
       "imports": {
@@ -28,19 +22,24 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useMemo } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag } from 'lucide-react';
+    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
     // =========================================================================
     // PENTING: MASUKKAN URL WEB APP GOOGLE APPS SCRIPT ANDA DI BAWAH INI !!!
     // =========================================================================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEQJ00rfoWu8XnRCTgj1DFwzOtxJWU50iBumUUV9M6dPKhmhWsg9hgyytj-q1ljlgx7w/exec'; 
 
-    const VALID_USERS = {
-      'orlando': 'larismanis1',
-      'msr': 'larismanis2'
-    };
-
     function App() {
+      // Data Master dari Spreadsheet
+      const [usersList, setUsersList] = useState([]);
+      const [items, setItems] = useState([]);
+      const [transactions, setTransactions] = useState([]);
+      
+      // State Aplikasi & Loading
+      const [initialLoading, setInitialLoading] = useState(true);
+      const [isSaving, setIsSaving] = useState(false); 
+      const [toast, setToast] = useState(null); // State untuk custom Alert
+      
       // Auth Internal
       const [isLoggedIn, setIsLoggedIn] = useState(() => sessionStorage.getItem('orlando_auth') === 'true');
       const [loginUsername, setLoginUsername] = useState('');
@@ -48,58 +47,68 @@
       const [loginError, setLoginError] = useState('');
       const [activeUser, setActiveUser] = useState(() => sessionStorage.getItem('orlando_user') || '');
 
-      // Database State
-      const [items, setItems] = useState([]);
-      const [transactions, setTransactions] = useState([]);
-      const [loading, setLoading] = useState(false);
-      const [isSaving, setIsSaving] = useState(false); 
-      
       // Nav & Filter
       const [activeTab, setActiveTab] = useState('pos');
       const [searchTerm, setSearchTerm] = useState('');
       const [invFilter, setInvFilter] = useState({ kategori: 'Semua', ukuran: 'Semua', sort: 'default' });
-      const [trxFilter, setTrxFilter] = useState({ type: 'Semua', time: 'Semua' }); 
+      const [trxFilter, setTrxFilter] = useState({ type: 'Semua', date: '' });
       
-      // Print & Kasir
-      const [printMode, setPrintMode] = useState(null);
-      const [receiptData, setReceiptData] = useState(null);
+      // Paginasi Riwayat Transaksi
+      const [currentPage, setCurrentPage] = useState(1);
+      const ITEMS_PER_PAGE = 50;
+
+      // Kasir & Customer
       const [cart, setCart] = useState([]);
       const [amountPaid, setAmountPaid] = useState('');
-
-      // Modals
+      const [customerName, setCustomerName] = useState('');
+      const [customerPhone, setCustomerPhone] = useState('');
+      
+      // Print & Modal
+      const [printMode, setPrintMode] = useState(null);
+      const [receiptData, setReceiptData] = useState(null);
       const [isFormModalOpen, setIsFormModalOpen] = useState(false);
       const [formMode, setFormMode] = useState('add');
       const [formData, setFormData] = useState({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: '', deskripsi: '', foto: '' });
       const [isTrxModalOpen, setIsTrxModalOpen] = useState(false);
       const [trxData, setTrxData] = useState({ itemId: '', nama: '', type: 'in', qty: 1, price: 0 });
       const [itemToDelete, setItemToDelete] = useState(null);
-      
-      // Modal Detail Barang
       const [detailItem, setDetailItem] = useState(null);
 
-      // Utility Generate ID Unik
       const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+
+      const showToast = (message, type = 'error') => {
+        setToast({ message, type });
+        setTimeout(() => setToast(null), 4000);
+      };
 
       // --- MENGAMBIL DATA DARI GOOGLE SHEETS ---
       const fetchData = async () => {
-        if (!isLoggedIn) return;
-        setLoading(true);
+        setInitialLoading(true);
+        
+        // Proteksi jika URL belum diganti
+        if (APPS_SCRIPT_URL.includes('AKfycbxxxxxxxxx')) {
+          setLoginError("Peringatan: URL Apps Script belum diganti. Silakan ganti APPS_SCRIPT_URL di dalam kode dengan URL valid Anda.");
+          setInitialLoading(false);
+          return;
+        }
+
         try {
           const res = await fetch(APPS_SCRIPT_URL + '?action=getData');
           const data = await res.json();
+          setUsersList(data.users || []);
           setItems(data.inventory || []);
           const sortedTrx = (data.transactions || []).sort((a, b) => new Date(b.date) - new Date(a.date));
           setTransactions(sortedTrx);
         } catch (error) {
-          console.error("Gagal mengambil data dari Spreadsheet:", error);
-          alert("Gagal terhubung ke Database Spreadsheet. Pastikan URL Web App benar.");
+          console.error("Gagal mengambil data:", error);
+          setLoginError("Gagal terhubung ke Spreadsheet. Pastikan URL Web App benar dan memiliki akses 'Siapa Saja'.");
         }
-        setLoading(false);
+        setInitialLoading(false);
       };
 
       useEffect(() => {
-        if (isLoggedIn) fetchData();
-      }, [isLoggedIn]);
+        fetchData();
+      }, []);
 
       // --- FUNGSI POST KE GOOGLE SHEETS ---
       const sendDataToSheet = async (payload) => {
@@ -113,7 +122,7 @@
           await fetchData(); 
         } catch (error) {
           console.error("Error saving data:", error);
-          alert("Gagal menyimpan data ke Spreadsheet!");
+          showToast("Gagal menyimpan data ke Spreadsheet!", "error");
         }
         setIsSaving(false);
       };
@@ -121,11 +130,19 @@
       // --- FUNGSI LOGIN ---
       const handleAppLogin = (e) => {
         e.preventDefault();
-        const inputUser = loginUsername.trim().toLowerCase();
-        if (VALID_USERS[inputUser] && VALID_USERS[inputUser] === loginPassword) {
-          setIsLoggedIn(true); setActiveUser(inputUser); setLoginError('');
+        const inputUser = loginUsername.trim();
+        
+        const foundUser = usersList.find(u => 
+          String(u.username).toLowerCase() === inputUser.toLowerCase() && 
+          String(u.pass) === loginPassword
+        );
+
+        if (foundUser) {
+          setIsLoggedIn(true); 
+          setActiveUser(foundUser.Nama); 
+          setLoginError('');
           sessionStorage.setItem('orlando_auth', 'true');
-          sessionStorage.setItem('orlando_user', inputUser);
+          sessionStorage.setItem('orlando_user', foundUser.Nama);
         } else {
           setLoginError('Username atau password salah!');
         }
@@ -139,20 +156,12 @@
       // --- CRUD INVENTORI ---
       const handleSaveItem = async (e) => {
         e.preventDefault();
-        // Memastikan deskripsi dan foto masuk ke payload
         const payload = {
           id: formMode === 'add' ? generateId() : formData.id,
-          nama: formData.nama,
-          kategori: formData.kategori,
-          ukuran: formData.ukuran,
-          hargaModal: Number(formData.hargaModal),
-          hargaJual: Number(formData.hargaJual),
-          stok: Number(formData.stok),
-          updatedAt: new Date().toISOString(),
-          deskripsi: formData.deskripsi || '', // Pastikan urutan payload tidak mempengaruhi
-          foto: formData.foto || ''            // di App Script, selama property namanya sesuai
+          nama: formData.nama, kategori: formData.kategori, ukuran: formData.ukuran,
+          hargaModal: Number(formData.hargaModal), hargaJual: Number(formData.hargaJual), stok: Number(formData.stok),
+          deskripsi: formData.deskripsi || '', foto: formData.foto || '', updatedAt: new Date().toISOString()
         };
-        
         await sendDataToSheet({ action: 'saveItem', payload: payload });
         setIsFormModalOpen(false);
       };
@@ -163,14 +172,16 @@
         setItemToDelete(null);
       };
 
-      // --- TRANSAKSI MANUAL ---
       const handleSaveTransaction = async (e) => {
         e.preventDefault();
         const item = items.find(i => i.id === trxData.itemId);
         if (!item) return;
         
         const qty = Number(trxData.qty);
-        if (trxData.type === 'out' && Number(item.stok) < qty) { alert("Stok tidak mencukupi!"); return; }
+        if (trxData.type === 'out' && Number(item.stok) < qty) { 
+          showToast("Stok tidak mencukupi!"); 
+          return; 
+        }
 
         const isOut = trxData.type === 'out';
         const actualPrice = isOut ? Number(trxData.price) : 0;
@@ -178,27 +189,12 @@
         const now = new Date().toISOString();
 
         const trxPayload = {
-          id: generateId(), 
-          itemId: item.id, 
-          itemName: `${item.nama} (${item.ukuran})`, 
-          type: trxData.type, 
-          quantity: qty,
-          costPrice: costPrice, 
-          price: actualPrice,
-          totalValue: isOut ? (actualPrice * qty) : 0, 
-          profit: isOut ? ((actualPrice - costPrice) * qty) : 0, 
-          date: now, 
-          cashier: activeUser
+          id: generateId(), itemId: item.id, itemName: `${item.nama} (${item.ukuran})`, type: trxData.type, quantity: qty,
+          costPrice: costPrice, price: actualPrice, totalValue: isOut ? (actualPrice * qty) : 0, profit: isOut ? ((actualPrice - costPrice) * qty) : 0, 
+          date: now, cashier: activeUser, customerName: '', customerPhone: ''
         };
-
         const newStok = trxData.type === 'in' ? (Number(item.stok) + qty) : (Number(item.stok) - qty);
-        
-        await sendDataToSheet({
-          action: 'saveTransaction',
-          transaction: trxPayload,
-          inventoryUpdate: { id: item.id, newStok: newStok }
-        });
-        
+        await sendDataToSheet({ action: 'saveTransaction', transaction: trxPayload, inventoryUpdate: { id: item.id, newStok: newStok }});
         setIsTrxModalOpen(false);
       };
 
@@ -228,8 +224,7 @@
 
       const updateCartDiscount = (itemId, value) => {
         let val = Number(value);
-        if (val < 0) val = 0;
-        if (val > 100) val = 100;
+        if (val < 0) val = 0; if (val > 100) val = 100;
         setCart(prev => prev.map(i => i.id === itemId ? { ...i, discount: val } : i));
       };
 
@@ -243,7 +238,10 @@
       const handleCheckout = async () => {
         if (cart.length === 0) return;
         const paid = Number(amountPaid);
-        if (paid < cartTotal) { alert("Nominal uang tunai kurang!"); return; }
+        if (paid < cartTotal) { 
+          showToast("Nominal uang tunai kurang dari total tagihan!"); 
+          return; 
+        }
 
         const now = new Date().toISOString();
         const trxs = [];
@@ -255,28 +253,22 @@
           const costPrice = Number(item.hargaModal) || 0;
           
           trxs.push({
-            id: generateId(), 
-            itemId: item.id, 
-            itemName: `${item.nama} (${item.ukuran})`, 
-            type: 'out', 
-            quantity: item.qty,
-            costPrice: costPrice, 
-            price: actualPrice,
-            totalValue: actualPrice * item.qty, 
-            profit: (actualPrice - costPrice) * item.qty,
-            date: now, 
-            cashier: activeUser
+            id: generateId(), itemId: item.id, itemName: `${item.nama} (${item.ukuran})`, type: 'out', quantity: item.qty,
+            costPrice: costPrice, price: actualPrice, totalValue: actualPrice * item.qty, profit: (actualPrice - costPrice) * item.qty,
+            date: now, cashier: activeUser, customerName: customerName, customerPhone: customerPhone
           });
           invUpdates.push({ id: item.id, newStok: Number(item.stok) - item.qty });
         });
 
         const receiptId = 'TRX' + Date.now().toString().slice(-6);
         setReceiptData({
-          id: receiptId, date: now, items: [...cart], total: cartTotal, paid: paid, change: paid - cartTotal, cashier: activeUser
+          id: receiptId, date: now, items: [...cart], total: cartTotal, paid: paid, change: paid - cartTotal, 
+          cashier: activeUser, customerName: customerName
         });
 
         await sendDataToSheet({ action: 'checkout', transactions: trxs, inventoryUpdates: invUpdates });
-        setCart([]); setAmountPaid('');
+        
+        setCart([]); setAmountPaid(''); setCustomerName(''); setCustomerPhone('');
         handlePrint('receipt');
       };
 
@@ -297,16 +289,19 @@
         return result;
       }, [items, searchTerm, invFilter]);
 
+      // FILTER TRANSAKSI
       const filteredTransactions = useMemo(() => {
         let result = transactions;
         if (trxFilter.type !== 'Semua') result = result.filter(t => t.type === (trxFilter.type === 'Masuk' ? 'in' : 'out'));
-        if (trxFilter.time !== 'Semua') {
-          const cutoff = new Date();
-          cutoff.setDate(cutoff.getDate() - Number(trxFilter.time));
-          result = result.filter(t => new Date(t.date) >= cutoff);
+        if (trxFilter.date !== '') {
+          result = result.filter(t => t.date && t.date.startsWith(trxFilter.date));
         }
         return result;
       }, [transactions, trxFilter]);
+
+      // PAGINASI TRANSAKSI
+      const totalPages = Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE);
+      const displayedTransactions = filteredTransactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
       const dashboardStats = useMemo(() => {
         const sales = transactions.filter(t => t.type === 'out');
@@ -340,8 +335,10 @@
       }, [items, transactions]);
 
       // ==========================================
-      // VIEW SCREEN LOGIN
+      // LOADING & SCREEN LOGIN
       // ==========================================
+      if (initialLoading) return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin text-orange-500" size={48} /><p className="font-medium text-slate-500 animate-pulse">Menghubungkan ke Google Sheets...</p></div>;
+
       if (!isLoggedIn) {
         return (
           <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans relative overflow-hidden">
@@ -358,7 +355,7 @@
               </div>
 
               <form onSubmit={handleAppLogin} className="space-y-5">
-                {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2 font-medium"><AlertCircle size={16} /> {loginError}</div>}
+                {loginError && <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-start gap-2 font-medium text-left leading-tight"><AlertCircle size={20} className="shrink-0" /> {loginError}</div>}
                 <div className="space-y-1"><label className="text-sm font-bold text-slate-700">Username</label><div className="relative"><User size={18} className="absolute left-3 top-3.5 text-slate-400" /><input type="text" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none" placeholder="Masukkan username" value={loginUsername} onChange={(e) => setLoginUsername(e.target.value)} required /></div></div>
                 <div className="space-y-1"><label className="text-sm font-bold text-slate-700">Password</label><div className="relative"><Lock size={18} className="absolute left-3 top-3.5 text-slate-400" /><input type="password" className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-orange-500 outline-none" placeholder="••••••••" value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} required /></div></div>
                 <button type="submit" className="w-full py-3.5 bg-slate-900 text-white rounded-xl font-bold shadow-lg hover:bg-slate-800 transition-colors flex justify-center items-center gap-2 mt-4">Masuk Aplikasi <ArrowUpCircle size={18} className="rotate-90" /></button>
@@ -368,17 +365,24 @@
         );
       }
 
-      if (loading) return <div className="min-h-screen bg-slate-50 flex flex-col items-center justify-center gap-4"><Loader2 className="animate-spin text-orange-500" size={48} /><p className="font-medium text-slate-500 animate-pulse">Menghubungkan ke Google Sheets...</p></div>;
-
       return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-12 relative">
           
-          {/* Ovelay Loading */}
+          {/* Custom Toast Notification */}
+          {toast && (
+            <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 print:hidden ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>
+              <AlertCircle size={20} />
+              <span className="font-medium text-sm">{toast.message}</span>
+              <button onClick={() => setToast(null)} className="p-1 hover:bg-black/20 rounded-lg ml-2"><X size={16}/></button>
+            </div>
+          )}
+
+          {/* Overlay Loading */}
           {isSaving && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center print:hidden">
               <div className="bg-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4">
                 <Loader2 className="animate-spin text-orange-500" size={28} />
-                <span className="font-bold text-slate-800 text-lg">Menyimpan Data ke Sheets...</span>
+                <span className="font-bold text-slate-800 text-lg">Menyimpan Data...</span>
               </div>
             </div>
           )}
@@ -391,7 +395,7 @@
                     <div className="bg-orange-500 p-2 rounded-lg"><Package size={24} /></div>
                     <div>
                       <h1 className="text-xl font-bold tracking-tight leading-tight">Orlando Garage Store</h1>
-                      <p className="text-xs text-slate-400">Kasir aktif: <span className="text-orange-400 capitalize">{activeUser}</span></p>
+                      <p className="text-xs text-slate-400">Kasir aktif: <span className="text-orange-400 font-bold capitalize">{activeUser}</span></p>
                     </div>
                   </div>
                   <button onClick={handleAppLogout} className="md:hidden p-2 text-slate-400 hover:text-red-400"><LogOut size={20} /></button>
@@ -401,7 +405,7 @@
                   <div className="flex bg-slate-800 rounded-lg p-1 w-full md:w-auto">
                     <button onClick={() => setActiveTab('pos')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'pos' ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><ShoppingCart size={16} /> Kasir (POS)</button>
                     <button onClick={() => setActiveTab('inventory')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'inventory' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><List size={16} /> Inventori</button>
-                    <button onClick={() => setActiveTab('transactions')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'transactions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><History size={16} /> Riwayat</button>
+                    <button onClick={() => { setActiveTab('transactions'); setCurrentPage(1); }} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'transactions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><History size={16} /> Riwayat</button>
                     <button onClick={() => setActiveTab('dashboard')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><BarChart2 size={16} /> Analisis</button>
                   </div>
                   <button onClick={handleAppLogout} className="hidden md:flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-red-400 transition-colors border border-transparent hover:border-red-400/30 rounded-lg bg-slate-800/50"><LogOut size={16} /> Keluar</button>
@@ -414,6 +418,7 @@
               {/* --- TAB KASIR (POS) --- */}
               {activeTab === 'pos' && (
                 <div className="flex flex-col lg:flex-row gap-6 items-start">
+                  {/* KATALOG KIRI */}
                   <div className="flex-1 w-full flex flex-col gap-4">
                     <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex gap-3 items-center">
                       <div className="relative flex-1">
@@ -443,9 +448,9 @@
                               <span className="bg-slate-100 px-1.5 py-0.5 rounded">{item.kategori}</span>
                               <span className={`font-bold ${Number(item.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>{item.stok} Pcs</span>
                             </div>
-                            <h3 className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1">{item.nama}</h3>
+                            <h3 className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1" title={item.nama}>{item.nama}</h3>
                             <p className="text-[10px] text-blue-600 font-semibold mb-1">Ukuran: {item.ukuran}</p>
-                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight mb-2 flex-1">{item.deskripsi || 'Tidak ada deskripsi'}</p>
+                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight mb-2 flex-1" title={item.deskripsi}>{item.deskripsi || 'Tidak ada deskripsi'}</p>
                             <p className="font-black text-slate-900 mt-auto">{formatRupiah(item.hargaJual)}</p>
                           </div>
                         </div>
@@ -453,8 +458,10 @@
                     </div>
                   </div>
 
+                  {/* KERANJANG KANAN */}
                   <div className="w-full lg:w-[400px] bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col h-[calc(100vh-160px)] sticky top-24">
                     <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-xl flex justify-between items-center"><h2 className="font-bold text-slate-800 flex items-center gap-2"><ShoppingCart size={18}/> Keranjang</h2><span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">{cart.length} Item</span></div>
+                    
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
                       {cart.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400"><ShoppingCart size={48} className="mb-4 opacity-20" /><p className="text-sm">Keranjang kosong</p></div>
@@ -477,7 +484,6 @@
                                 <button onClick={() => removeFromCart(cItem.id)} className="p-1 text-red-400 hover:bg-red-50 rounded-md"><X size={16}/></button>
                               </div>
                               <div className="flex justify-between items-center">
-                                {/* Input Diskon Per Item */}
                                 <div className="flex items-center gap-1 bg-orange-50 border border-orange-100 rounded-md px-2 py-1" title="Diskon (%)">
                                   <Tag size={12} className="text-orange-600" />
                                   <span className="text-[10px] font-bold text-orange-600">Disc</span>
@@ -495,8 +501,15 @@
                         })
                       )}
                     </div>
+                    
                     <div className="p-4 bg-slate-50 border-t border-slate-200 rounded-b-xl space-y-4">
-                      <div className="flex justify-between items-center mb-2"><span className="text-slate-500 font-medium text-sm">Total Tagihan</span><span className="text-2xl font-black text-slate-900">{formatRupiah(cartTotal)}</span></div>
+                      {/* Form Informasi Customer */}
+                      <div className="flex gap-2">
+                        <input type="text" className="w-1/2 p-2 text-xs border border-slate-300 rounded outline-none focus:border-orange-500" placeholder="Nama Cust (Opsional)" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
+                        <input type="text" className="w-1/2 p-2 text-xs border border-slate-300 rounded outline-none focus:border-orange-500" placeholder="No. HP (Opsional)" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
+                      </div>
+
+                      <div className="flex justify-between items-center"><span className="text-slate-500 font-medium text-sm">Total Tagihan</span><span className="text-2xl font-black text-slate-900">{formatRupiah(cartTotal)}</span></div>
                       <div>
                         <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Uang Tunai (Rp)</label>
                         <input type="number" className="w-full p-3 border border-slate-300 rounded-lg font-bold text-lg focus:ring-2 focus:ring-orange-500 outline-none" placeholder="100000" value={amountPaid} onChange={(e) => setAmountPaid(e.target.value)}/>
@@ -577,35 +590,69 @@
                 </div>
               )}
 
-              {/* --- TAB RIWAYAT --- */}
+              {/* --- TAB RIWAYAT TRANSAKSI (DENGAN PAGINASI) --- */}
               {activeTab === 'transactions' && (
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
                   <div className="p-4 border-b border-slate-100 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div><h2 className="font-bold text-slate-800 text-lg">Riwayat Transaksi</h2><p className="text-sm text-slate-500">{filteredTransactions.length} catatan</p></div>
-                    <div className="flex gap-2">
+                    <div>
+                      <h2 className="font-bold text-slate-800 text-lg">Riwayat Transaksi</h2>
+                      <p className="text-sm text-slate-500">Total: {filteredTransactions.length} catatan</p>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                      <select className="bg-slate-50 border border-slate-200 text-sm rounded-lg px-3 py-2 outline-none" value={trxFilter.type} onChange={(e) => {setTrxFilter({...trxFilter, type: e.target.value}); setCurrentPage(1);}}>
+                        <option value="Semua">Semua Jenis</option><option value="Masuk">Masuk (In)</option><option value="Keluar">Jual (Out)</option>
+                      </select>
+                      <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2">
+                         <Calendar size={14} className="text-slate-400 mr-1"/>
+                         <input type="date" className="bg-transparent text-sm py-1.5 outline-none" value={trxFilter.date} onChange={(e) => {setTrxFilter({...trxFilter, date: e.target.value}); setCurrentPage(1);}} />
+                         {trxFilter.date && <button onClick={() => {setTrxFilter({...trxFilter, date: ''}); setCurrentPage(1);}} className="ml-2 text-slate-400 hover:text-red-500"><X size={14}/></button>}
+                      </div>
                       <button onClick={fetchData} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200">⟳ Reload</button>
-                      <button onClick={() => handlePrint('sales')} className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium"><Download size={16} /> Cetak PDF</button>
+                      <button onClick={() => handlePrint('sales')} className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 px-4 py-2 rounded-lg font-medium"><Download size={16} /> PDF</button>
                     </div>
                   </div>
+                  
                   <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                     <table className="w-full text-left border-collapse min-w-[800px]">
                       <thead className="sticky top-0 bg-slate-50 shadow-sm z-0">
                         <tr className="border-b border-slate-200 text-sm text-slate-600">
-                          <th className="p-4 font-medium">Waktu</th><th className="p-4 font-medium">Jenis</th><th className="p-4 font-medium">Barang</th><th className="p-4 font-medium">Kasir</th><th className="p-4 font-medium">Qty</th><th className="p-4 font-medium">Total Harga</th><th className="p-4 font-medium">Profit</th>
+                          <th className="p-4 font-medium">Waktu</th><th className="p-4 font-medium">Jenis</th><th className="p-4 font-medium">Barang (Ukuran)</th><th className="p-4 font-medium">Kasir / Customer</th><th className="p-4 font-medium text-center">Qty</th><th className="p-4 font-medium text-right">Total Harga</th><th className="p-4 font-medium text-right">Profit</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {filteredTransactions.map(trx => (
-                          <tr key={trx.id} className="hover:bg-slate-50">
-                            <td className="p-4 text-sm text-slate-500">{formatDate(trx.date)}</td>
-                            <td className="p-4">{trx.type === 'in' ? <span className="text-green-700 bg-green-50 px-2 py-1 text-xs rounded-full font-medium">Masuk</span> : <span className="text-blue-700 bg-blue-50 px-2 py-1 text-xs rounded-full font-medium">Jual</span>}</td>
-                            <td className="p-4 font-medium text-slate-800">{trx.itemName}</td><td className="p-4 text-sm text-slate-600 capitalize">{trx.cashier || '-'}</td><td className="p-4 text-slate-800 font-bold">{trx.quantity}</td>
-                            <td className="p-4">{trx.type === 'out' ? formatRupiah(trx.totalValue) : '-'}</td><td className="p-4">{trx.type === 'out' ? <span className="font-bold text-green-600">+{formatRupiah(trx.profit)}</span> : '-'}</td>
-                          </tr>
-                        ))}
+                        {displayedTransactions.length === 0 ? (
+                           <tr><td colSpan="7" className="p-8 text-center text-slate-500">Tidak ada transaksi ditemukan.</td></tr>
+                        ) : (
+                          displayedTransactions.map(trx => (
+                            <tr key={trx.id} className="hover:bg-slate-50">
+                              <td className="p-4 text-sm text-slate-500">{formatDate(trx.date)}</td>
+                              <td className="p-4">{trx.type === 'in' ? <span className="text-green-700 bg-green-50 px-2 py-1 text-xs rounded-full font-medium">Masuk</span> : <span className="text-blue-700 bg-blue-50 px-2 py-1 text-xs rounded-full font-medium">Jual</span>}</td>
+                              <td className="p-4 font-medium text-slate-800">{trx.itemName}</td>
+                              <td className="p-4 text-sm text-slate-600">
+                                <span className="font-semibold capitalize text-orange-600">Ksr: {trx.cashier || '-'}</span>
+                                {trx.customerName && <span className="block text-[10px] text-slate-500 mt-0.5">Cust: {trx.customerName}</span>}
+                              </td>
+                              <td className="p-4 text-slate-800 font-bold text-center">{trx.quantity}</td>
+                              <td className="p-4 text-right">{trx.type === 'out' ? formatRupiah(trx.totalValue) : '-'}</td>
+                              <td className="p-4 text-right">{trx.type === 'out' ? <span className="font-bold text-green-600">+{formatRupiah(trx.profit)}</span> : '-'}</td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
+                  
+                  {/* Footer Paginasi */}
+                  {totalPages > 1 && (
+                    <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+                      <span className="text-sm text-slate-500">Halaman {currentPage} dari {totalPages}</span>
+                      <div className="flex gap-2">
+                        <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="p-2 bg-white border border-slate-200 rounded text-slate-600 disabled:opacity-50"><ChevronLeft size={16}/></button>
+                        <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="p-2 bg-white border border-slate-200 rounded text-slate-600 disabled:opacity-50"><ChevronRight size={16}/></button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -683,7 +730,10 @@
                 <h1 className="text-xl font-black mb-1">ORLANDO GARAGE</h1>
                 <p className="mb-3">Sistem Manajemen Stok & POS</p>
                 <p className="text-left border-t border-dashed border-black pt-2 mb-1">Nota : {receiptData.id}</p>
-                <p className="text-left border-b border-dashed border-black pb-2 mb-2 flex justify-between"><span>Waktu: {formatDate(receiptData.date)}</span><span className="capitalize">Ksr: {receiptData.cashier}</span></p>
+                <p className="text-left mb-1 flex justify-between"><span>Waktu: {formatDate(receiptData.date)}</span><span className="capitalize">Ksr: {receiptData.cashier}</span></p>
+                {receiptData.customerName && <p className="text-left border-b border-dashed border-black pb-2 mb-2 font-bold uppercase">Pelanggan: {receiptData.customerName}</p>}
+                {!receiptData.customerName && <div className="border-b border-dashed border-black pb-2 mb-2"></div>}
+                
                 <div className="text-left w-full space-y-2 mb-3">
                   {receiptData.items.map((item, idx) => {
                     const discMulti = 1 - (item.discount || 0) / 100;
