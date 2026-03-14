@@ -139,6 +139,7 @@
       // --- CRUD INVENTORI ---
       const handleSaveItem = async (e) => {
         e.preventDefault();
+        // Memastikan deskripsi dan foto masuk ke payload
         const payload = {
           id: formMode === 'add' ? generateId() : formData.id,
           nama: formData.nama,
@@ -147,9 +148,9 @@
           hargaModal: Number(formData.hargaModal),
           hargaJual: Number(formData.hargaJual),
           stok: Number(formData.stok),
-          deskripsi: formData.deskripsi || '', // Kirim deskripsi
-          foto: formData.foto || '',           // Kirim foto
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
+          deskripsi: formData.deskripsi || '', // Pastikan urutan payload tidak mempengaruhi
+          foto: formData.foto || ''            // di App Script, selama property namanya sesuai
         };
         
         await sendDataToSheet({ action: 'saveItem', payload: payload });
@@ -179,7 +180,7 @@
         const trxPayload = {
           id: generateId(), 
           itemId: item.id, 
-          itemName: `${item.nama} (${item.ukuran})`, // Tambahkan ukuran di transaksi
+          itemName: `${item.nama} (${item.ukuran})`, 
           type: trxData.type, 
           quantity: qty,
           costPrice: costPrice, 
@@ -210,7 +211,6 @@
             if (existing.qty >= Number(item.stok)) return prev;
             return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
           }
-          // Tambahkan properti discount (default 0)
           return [...prev, { ...item, qty: 1, discount: 0 }];
         });
       };
@@ -226,7 +226,6 @@
         }));
       };
 
-      // Fungsi mengatur diskon per item (0-100%)
       const updateCartDiscount = (itemId, value) => {
         let val = Number(value);
         if (val < 0) val = 0;
@@ -236,7 +235,6 @@
 
       const removeFromCart = (itemId) => setCart(prev => prev.filter(i => i.id !== itemId));
       
-      // Kalkulasi total menyesuaikan diskon per item
       const cartTotal = cart.reduce((sum, i) => {
         const discMultiplier = 1 - (i.discount || 0) / 100;
         return sum + ((Number(i.hargaJual) || 0) * discMultiplier * i.qty);
@@ -259,7 +257,7 @@
           trxs.push({
             id: generateId(), 
             itemId: item.id, 
-            itemName: `${item.nama} (${item.ukuran})`, // Tambahkan ukuran agar masuk riwayat penjualan
+            itemName: `${item.nama} (${item.ukuran})`, 
             type: 'out', 
             quantity: item.qty,
             costPrice: costPrice, 
@@ -566,7 +564,7 @@
                                 <div className="flex items-center justify-center gap-1.5">
                                   <button onClick={() => setDetailItem(item)} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded" title="Lihat Detail"><Info size={16} /></button>
                                   <button onClick={() => { setTrxData({ itemId: item.id, nama: item.nama, type: 'in', qty: 1, price: 0 }); setIsTrxModalOpen(true); }} className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded" title="Catat Masuk Gudang"><ArrowDownCircle size={14} /> Masuk</button>
-                                  <button onClick={() => { setFormMode('edit'); setFormData({...item, hargaJual: Number(item.hargaJual) || '', hargaModal: Number(item.hargaModal) || ''}); setIsFormModalOpen(true); }} className="p-2 text-slate-400 hover:text-orange-600"><Edit2 size={16} /></button>
+                                  <button onClick={() => { setFormMode('edit'); setFormData({...item, hargaJual: Number(item.hargaJual) || '', hargaModal: Number(item.hargaModal) || '', deskripsi: item.deskripsi || '', foto: item.foto || ''}); setIsFormModalOpen(true); }} className="p-2 text-slate-400 hover:text-orange-600"><Edit2 size={16} /></button>
                                   <button onClick={() => setItemToDelete(item)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
                                 </div>
                               </td>
