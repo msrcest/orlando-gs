@@ -609,7 +609,7 @@
                     <table className="w-full text-left border-collapse min-w-[800px]">
                       <thead className="sticky top-0 bg-slate-50 shadow-sm z-0">
                         <tr className="border-b border-slate-200 text-sm text-slate-600">
-                          <th className="p-4 font-medium">Wekdal & Nota</th><th className="p-4 font-medium">Tipe</th><th className="p-4 font-medium">Barang (Ukr)</th><th className="p-4 font-medium">Kasir / Pelanggan</th><th className="p-4 font-medium text-center">Qty</th><th className="p-4 font-medium text-right">Rergi Total</th><th className="p-4 font-medium text-right">Bathèn</th>
+                          <th className="p-4 font-medium">Wekdal & Nota</th><th className="p-4 font-medium">Tipe</th><th className="p-4 font-medium">Barang (Ukr)</th><th className="p-4 font-medium">Kasir</th><th className="p-4 font-medium text-center">Qty</th><th className="p-4 font-medium text-right">Rergi Total</th><th className="p-4 font-medium text-right">Bathèn</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -720,7 +720,7 @@
             {printMode === 'receipt' && receiptData && (
               <div className="font-mono text-[12px] leading-tight max-w-[80mm] mx-auto py-4 text-center">
                 <h1 className="text-xl font-black mb-1">ORLANDO GARAGE</h1>
-                <p className="mb-3">Sistem Manajemen Stok & POS</p>
+                <p className="mb-3">Beli Baju Disini Aja..</p>
                 <p className="text-left border-t border-dashed border-black pt-2 mb-1">Nota : #{receiptData.id}</p>
                 <p className="text-left mb-1 flex justify-between"><span>Wekdal: {formatDate(receiptData.date)}</span><span className="capitalize">Ksr: {receiptData.cashier}</span></p>
                 {receiptData.customerName && <p className="text-left border-b border-dashed border-black pb-2 mb-2 font-bold uppercase">Pelanggan: {receiptData.customerName}</p>}
