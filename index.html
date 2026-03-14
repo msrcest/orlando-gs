@@ -28,7 +28,7 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useMemo } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info } from 'lucide-react';
+    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag } from 'lucide-react';
 
     // =========================================================================
     // PENTING: MASUKKAN URL WEB APP GOOGLE APPS SCRIPT ANDA DI BAWAH INI !!!
@@ -177,10 +177,17 @@
         const now = new Date().toISOString();
 
         const trxPayload = {
-          id: generateId(), itemId: item.id, itemName: item.nama, type: trxData.type, quantity: qty,
-          costPrice: costPrice, price: actualPrice,
-          totalValue: isOut ? (actualPrice * qty) : 0, profit: isOut ? ((actualPrice - costPrice) * qty) : 0, 
-          date: now, cashier: activeUser
+          id: generateId(), 
+          itemId: item.id, 
+          itemName: `${item.nama} (${item.ukuran})`, // Tambahkan ukuran di transaksi
+          type: trxData.type, 
+          quantity: qty,
+          costPrice: costPrice, 
+          price: actualPrice,
+          totalValue: isOut ? (actualPrice * qty) : 0, 
+          profit: isOut ? ((actualPrice - costPrice) * qty) : 0, 
+          date: now, 
+          cashier: activeUser
         };
 
         const newStok = trxData.type === 'in' ? (Number(item.stok) + qty) : (Number(item.stok) - qty);
@@ -203,7 +210,8 @@
             if (existing.qty >= Number(item.stok)) return prev;
             return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
           }
-          return [...prev, { ...item, qty: 1 }];
+          // Tambahkan properti discount (default 0)
+          return [...prev, { ...item, qty: 1, discount: 0 }];
         });
       };
 
@@ -218,8 +226,21 @@
         }));
       };
 
+      // Fungsi mengatur diskon per item (0-100%)
+      const updateCartDiscount = (itemId, value) => {
+        let val = Number(value);
+        if (val < 0) val = 0;
+        if (val > 100) val = 100;
+        setCart(prev => prev.map(i => i.id === itemId ? { ...i, discount: val } : i));
+      };
+
       const removeFromCart = (itemId) => setCart(prev => prev.filter(i => i.id !== itemId));
-      const cartTotal = cart.reduce((sum, i) => sum + ((Number(i.hargaJual) || 0) * i.qty), 0);
+      
+      // Kalkulasi total menyesuaikan diskon per item
+      const cartTotal = cart.reduce((sum, i) => {
+        const discMultiplier = 1 - (i.discount || 0) / 100;
+        return sum + ((Number(i.hargaJual) || 0) * discMultiplier * i.qty);
+      }, 0);
       
       const handleCheckout = async () => {
         if (cart.length === 0) return;
@@ -231,13 +252,22 @@
         const invUpdates = [];
 
         cart.forEach(item => {
-          const actualPrice = Number(item.hargaJual) || 0;
+          const discMultiplier = 1 - (item.discount || 0) / 100;
+          const actualPrice = (Number(item.hargaJual) || 0) * discMultiplier;
           const costPrice = Number(item.hargaModal) || 0;
+          
           trxs.push({
-            id: generateId(), itemId: item.id, itemName: item.nama, type: 'out', quantity: item.qty,
-            costPrice: costPrice, price: actualPrice,
-            totalValue: actualPrice * item.qty, profit: (actualPrice - costPrice) * item.qty,
-            date: now, cashier: activeUser
+            id: generateId(), 
+            itemId: item.id, 
+            itemName: `${item.nama} (${item.ukuran})`, // Tambahkan ukuran agar masuk riwayat penjualan
+            type: 'out', 
+            quantity: item.qty,
+            costPrice: costPrice, 
+            price: actualPrice,
+            totalValue: actualPrice * item.qty, 
+            profit: (actualPrice - costPrice) * item.qty,
+            date: now, 
+            cashier: activeUser
           });
           invUpdates.push({ id: item.id, newStok: Number(item.stok) - item.qty });
         });
@@ -403,17 +433,21 @@
                           {/* Foto Thumbnail */}
                           <div className="h-32 bg-slate-100 flex items-center justify-center overflow-hidden relative">
                             {item.foto ? (
-                              <img src={item.foto} alt={item.nama} className="w-full h-full object-cover" onError={(e) => { e.target.src = ''; e.target.onerror = null; e.target.className = 'hidden'; e.target.nextSibling.className = 'flex flex-col items-center justify-center text-slate-400'; }} />
-                            ) : null}
-                            <div className={`flex flex-col items-center justify-center text-slate-400 ${item.foto ? 'hidden' : 'flex'}`}>
-                              <ImageIcon size={32} />
-                            </div>
+                              <img src={item.foto} alt={item.nama} className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/150x150/f1f5f9/94a3b8?text=Image+Error'; }} />
+                            ) : (
+                              <ImageIcon size={32} className="text-slate-300" />
+                            )}
                             {Number(item.stok) === 0 && <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-[1px]"><span className="bg-red-600 text-white font-bold text-xs px-2 py-1 rounded">HABIS</span></div>}
                           </div>
 
                           <div className="p-3 flex-1 flex flex-col">
-                            <div className="text-[10px] text-slate-500 mb-1 flex justify-between items-center"><span className="bg-slate-100 px-1.5 py-0.5 rounded">{item.kategori}</span><span className={`font-bold ${Number(item.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>{item.stok} Pcs</span></div>
-                            <h3 className="font-bold text-slate-800 text-xs sm:text-sm mb-1 line-clamp-2">{item.nama}</h3>
+                            <div className="text-[10px] text-slate-500 mb-1 flex justify-between items-center">
+                              <span className="bg-slate-100 px-1.5 py-0.5 rounded">{item.kategori}</span>
+                              <span className={`font-bold ${Number(item.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>{item.stok} Pcs</span>
+                            </div>
+                            <h3 className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1">{item.nama}</h3>
+                            <p className="text-[10px] text-blue-600 font-semibold mb-1">Ukuran: {item.ukuran}</p>
+                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight mb-2 flex-1">{item.deskripsi || 'Tidak ada deskripsi'}</p>
                             <p className="font-black text-slate-900 mt-auto">{formatRupiah(item.hargaJual)}</p>
                           </div>
                         </div>
@@ -427,19 +461,40 @@
                       {cart.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-400"><ShoppingCart size={48} className="mb-4 opacity-20" /><p className="text-sm">Keranjang kosong</p></div>
                       ) : (
-                        cart.map((cItem) => (
-                          <div key={cItem.id} className="flex justify-between items-center pb-4 border-b border-slate-100 last:border-0 last:pb-0">
-                            <div className="flex-1 pr-2"><p className="font-semibold text-slate-800 text-sm leading-tight mb-1">{cItem.nama}</p><p className="text-xs text-slate-500">{formatRupiah(cItem.hargaJual)}</p></div>
-                            <div className="flex flex-col items-end gap-2">
-                              <p className="font-bold text-slate-900 text-sm">{formatRupiah((Number(cItem.hargaJual) || 0) * cItem.qty)}</p>
-                              <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
-                                <button onClick={() => cItem.qty === 1 ? removeFromCart(cItem.id) : updateCartQty(cItem.id, -1)} className="p-1 text-slate-600 hover:bg-slate-200 rounded-md"><Minus size={14}/></button>
-                                <span className="text-sm font-bold w-6 text-center">{cItem.qty}</span>
-                                <button onClick={() => updateCartQty(cItem.id, 1)} className="p-1 text-slate-600 hover:bg-slate-200 rounded-md"><Plus size={14}/></button>
+                        cart.map((cItem) => {
+                          const discMultiplier = 1 - (cItem.discount || 0) / 100;
+                          const discountedPrice = (Number(cItem.hargaJual) || 0) * discMultiplier;
+                          
+                          return (
+                            <div key={cItem.id} className="flex flex-col pb-4 border-b border-slate-100 last:border-0 last:pb-0 gap-2">
+                              <div className="flex justify-between items-start">
+                                <div className="flex-1 pr-2">
+                                  <p className="font-semibold text-slate-800 text-sm leading-tight mb-0.5">{cItem.nama}</p>
+                                  <p className="text-xs text-blue-600 font-medium">Ukr: {cItem.ukuran}</p>
+                                  <div className="flex items-center gap-2 mt-1">
+                                    {cItem.discount > 0 && <span className="text-[10px] text-slate-400 line-through">{formatRupiah(cItem.hargaJual)}</span>}
+                                    <span className="text-xs font-bold text-slate-700">{formatRupiah(discountedPrice)}</span>
+                                  </div>
+                                </div>
+                                <button onClick={() => removeFromCart(cItem.id)} className="p-1 text-red-400 hover:bg-red-50 rounded-md"><X size={16}/></button>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                {/* Input Diskon Per Item */}
+                                <div className="flex items-center gap-1 bg-orange-50 border border-orange-100 rounded-md px-2 py-1" title="Diskon (%)">
+                                  <Tag size={12} className="text-orange-600" />
+                                  <span className="text-[10px] font-bold text-orange-600">Disc</span>
+                                  <input type="number" min="0" max="100" value={cItem.discount || ''} onChange={(e) => updateCartDiscount(cItem.id, e.target.value)} className="w-10 text-xs bg-transparent outline-none font-bold text-center text-slate-800" placeholder="0"/>
+                                  <span className="text-[10px] font-bold text-orange-600">%</span>
+                                </div>
+                                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+                                  <button onClick={() => cItem.qty === 1 ? removeFromCart(cItem.id) : updateCartQty(cItem.id, -1)} className="p-1 text-slate-600 hover:bg-slate-200 rounded-md"><Minus size={14}/></button>
+                                  <span className="text-sm font-bold w-6 text-center">{cItem.qty}</span>
+                                  <button onClick={() => updateCartQty(cItem.id, 1)} className="p-1 text-slate-600 hover:bg-slate-200 rounded-md"><Plus size={14}/></button>
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        ))
+                          );
+                        })
                       )}
                     </div>
                     <div className="p-4 bg-slate-50 border-t border-slate-200 rounded-b-xl space-y-4">
@@ -494,7 +549,7 @@
                             <tr key={item.id} className="hover:bg-slate-50 group">
                               <td className="p-4">
                                 <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200">
-                                  {item.foto ? <img src={item.foto} alt="pic" className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-slate-300"/>}
+                                  {item.foto ? <img src={item.foto} alt="pic" className="w-full h-full object-cover" onError={(e) => { e.target.onerror = null; e.target.src = 'https://placehold.co/150x150/f1f5f9/94a3b8?text=Image+Error'; }} /> : <ImageIcon size={20} className="text-slate-300"/>}
                                 </div>
                               </td>
                               <td className="p-4">
@@ -632,9 +687,21 @@
                 <p className="text-left border-t border-dashed border-black pt-2 mb-1">Nota : {receiptData.id}</p>
                 <p className="text-left border-b border-dashed border-black pb-2 mb-2 flex justify-between"><span>Waktu: {formatDate(receiptData.date)}</span><span className="capitalize">Ksr: {receiptData.cashier}</span></p>
                 <div className="text-left w-full space-y-2 mb-3">
-                  {receiptData.items.map((item, idx) => (
-                    <div key={idx}><p className="font-bold truncate">{item.nama}</p><div className="flex justify-between"><span>{item.qty} x {formatRupiah(item.hargaJual).replace('Rp', '')}</span><span>{formatRupiah(item.qty * (item.hargaJual)).replace('Rp', '')}</span></div></div>
-                  ))}
+                  {receiptData.items.map((item, idx) => {
+                    const discMulti = 1 - (item.discount || 0) / 100;
+                    const price = (Number(item.hargaJual) || 0) * discMulti;
+                    const total = price * item.qty;
+                    return (
+                      <div key={idx} className="mb-1">
+                        <p className="font-bold truncate">{item.nama} ({item.ukuran})</p>
+                        {item.discount > 0 && <p className="text-[10px] text-slate-500">Diskon: {item.discount}%</p>}
+                        <div className="flex justify-between">
+                          <span>{item.qty} x {formatRupiah(price).replace('Rp', '')}</span>
+                          <span>{formatRupiah(total).replace('Rp', '')}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
                 <div className="border-t border-dashed border-black pt-2 space-y-1 text-right">
                   <div className="flex justify-between font-bold text-sm"><span>TOTAL:</span><span>{formatRupiah(receiptData.total)}</span></div>
