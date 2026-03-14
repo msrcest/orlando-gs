@@ -28,7 +28,7 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useMemo } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2 } from 'lucide-react';
+    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info } from 'lucide-react';
 
     // =========================================================================
     // PENTING: MASUKKAN URL WEB APP GOOGLE APPS SCRIPT ANDA DI BAWAH INI !!!
@@ -52,7 +52,7 @@
       const [items, setItems] = useState([]);
       const [transactions, setTransactions] = useState([]);
       const [loading, setLoading] = useState(false);
-      const [isSaving, setIsSaving] = useState(false); // Loading khusus saat klik tombol simpan/checkout
+      const [isSaving, setIsSaving] = useState(false); 
       
       // Nav & Filter
       const [activeTab, setActiveTab] = useState('pos');
@@ -69,12 +69,16 @@
       // Modals
       const [isFormModalOpen, setIsFormModalOpen] = useState(false);
       const [formMode, setFormMode] = useState('add');
-      const [formData, setFormData] = useState({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: '' });
+      // Tambahkan default state deskripsi & foto
+      const [formData, setFormData] = useState({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: '', deskripsi: '', foto: '' });
       const [isTrxModalOpen, setIsTrxModalOpen] = useState(false);
       const [trxData, setTrxData] = useState({ itemId: '', nama: '', type: 'in', qty: 1, price: 0 });
       const [itemToDelete, setItemToDelete] = useState(null);
+      
+      // Modal Detail Barang
+      const [detailItem, setDetailItem] = useState(null);
 
-      // Utility Generate ID Unik (karena tidak ada Firebase)
+      // Utility Generate ID Unik
       const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
       // --- MENGAMBIL DATA DARI GOOGLE SHEETS ---
@@ -85,7 +89,6 @@
           const res = await fetch(APPS_SCRIPT_URL + '?action=getData');
           const data = await res.json();
           setItems(data.inventory || []);
-          // Urutkan transaksi dari yang terbaru
           const sortedTrx = (data.transactions || []).sort((a, b) => new Date(b.date) - new Date(a.date));
           setTransactions(sortedTrx);
         } catch (error) {
@@ -103,13 +106,12 @@
       const sendDataToSheet = async (payload) => {
         setIsSaving(true);
         try {
-          // Gunakan text/plain untuk menghindari CORS Preflight Block di browser
           await fetch(APPS_SCRIPT_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'text/plain;charset=utf-8' },
             body: JSON.stringify(payload)
           });
-          await fetchData(); // Refresh data setelah berhasil
+          await fetchData(); 
         } catch (error) {
           console.error("Error saving data:", error);
           alert("Gagal menyimpan data ke Spreadsheet!");
@@ -146,6 +148,8 @@
           hargaModal: Number(formData.hargaModal),
           hargaJual: Number(formData.hargaJual),
           stok: Number(formData.stok),
+          deskripsi: formData.deskripsi || '', // Tambah deskripsi
+          foto: formData.foto || '',           // Tambah foto
           updatedAt: new Date().toISOString()
         };
         
@@ -244,17 +248,12 @@
           id: receiptId, date: now, items: [...cart], total: cartTotal, paid: paid, change: paid - cartTotal, cashier: activeUser
         });
 
-        // Simpan Data
         await sendDataToSheet({ action: 'checkout', transactions: trxs, inventoryUpdates: invUpdates });
-
         setCart([]); setAmountPaid('');
         handlePrint('receipt');
       };
 
-      // --- Print Handler ---
       const handlePrint = (mode) => { setPrintMode(mode); setTimeout(() => { window.print(); setPrintMode(null); }, 500); };
-
-      // --- Format Data & Filter ---
       const formatRupiah = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num || 0);
       const formatDate = (iso) => iso ? new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso)) : '-';
 
@@ -328,7 +327,7 @@
                   <Package size={32} className="text-white" />
                 </div>
                 <h1 className="text-2xl font-black text-slate-900">Orlando Garage Store</h1>
-                <p className="text-sm text-slate-500 mt-1">Sistem Point of Sale & Inventori (Spreadsheet)</p>
+                <p className="text-sm text-slate-500 mt-1">Sistem Point of Sale & Inventori</p>
               </div>
 
               <form onSubmit={handleAppLogin} className="space-y-5">
@@ -347,7 +346,7 @@
       return (
         <div className="min-h-screen bg-slate-50 font-sans text-slate-800 pb-12 relative">
           
-          {/* Ovelay Loading saat Proses Simpan ke Database */}
+          {/* Ovelay Loading */}
           {isSaving && (
             <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center print:hidden">
               <div className="bg-white px-6 py-4 rounded-xl shadow-2xl flex items-center gap-4">
@@ -401,12 +400,23 @@
 
                     <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 h-[calc(100vh-250px)] overflow-y-auto pb-6 pr-2">
                       {filteredItems.map(item => (
-                        <div key={item.id} onClick={() => addToCart(item)} className={`bg-white rounded-xl border p-4 cursor-pointer transition-all hover:shadow-md ${Number(item.stok) > 0 ? 'border-slate-200 hover:border-orange-500' : 'border-red-100 opacity-60 grayscale'}`}>
-                          <div className="text-xs text-slate-500 mb-1 flex justify-between items-center"><span className="bg-slate-100 px-2 py-0.5 rounded">{item.kategori}</span><span className={`font-bold ${Number(item.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>{item.stok} Pcs</span></div>
-                          <h3 className="font-bold text-slate-800 text-sm mb-1 line-clamp-2 leading-tight h-10">{item.nama}</h3>
-                          <p className="text-xs text-slate-500 mb-3">Ukuran: {item.ukuran}</p>
-                          <p className="font-bold text-slate-900">{formatRupiah(item.hargaJual)}</p>
-                          {Number(item.stok) === 0 && <p className="text-[10px] text-red-500 font-bold mt-2 text-center">STOK HABIS</p>}
+                        <div key={item.id} onClick={() => addToCart(item)} className={`bg-white rounded-xl border overflow-hidden cursor-pointer transition-all hover:shadow-md flex flex-col ${Number(item.stok) > 0 ? 'border-slate-200 hover:border-orange-500' : 'border-red-100 opacity-60 grayscale'}`}>
+                          {/* Foto Thumbnail */}
+                          <div className="h-32 bg-slate-100 flex items-center justify-center overflow-hidden relative">
+                            {item.foto ? (
+                              <img src={item.foto} alt={item.nama} className="w-full h-full object-cover" onError={(e) => { e.target.src = ''; e.target.onerror = null; e.target.className = 'hidden'; e.target.nextSibling.className = 'flex flex-col items-center justify-center text-slate-400'; }} />
+                            ) : null}
+                            <div className={`flex flex-col items-center justify-center text-slate-400 ${item.foto ? 'hidden' : 'flex'}`}>
+                              <ImageIcon size={32} />
+                            </div>
+                            {Number(item.stok) === 0 && <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-[1px]"><span className="bg-red-600 text-white font-bold text-xs px-2 py-1 rounded">HABIS</span></div>}
+                          </div>
+
+                          <div className="p-3 flex-1 flex flex-col">
+                            <div className="text-[10px] text-slate-500 mb-1 flex justify-between items-center"><span className="bg-slate-100 px-1.5 py-0.5 rounded">{item.kategori}</span><span className={`font-bold ${Number(item.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>{item.stok} Pcs</span></div>
+                            <h3 className="font-bold text-slate-800 text-xs sm:text-sm mb-1 line-clamp-2">{item.nama}</h3>
+                            <p className="font-black text-slate-900 mt-auto">{formatRupiah(item.hargaJual)}</p>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -461,31 +471,48 @@
                       </div>
                       <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                         <button onClick={fetchData} className="flex-1 md:flex-none items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-lg font-medium flex" title="Muat Ulang Data">⟳ Refresh</button>
-                        <button onClick={() => handlePrint('stock')} className="flex-1 md:flex-none items-center justify-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2.5 rounded-lg font-medium flex"><Printer size={16} /> Cetak Stok (PDF)</button>
-                        <button onClick={() => { setFormMode('add'); setFormData({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: '' }); setIsFormModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-lg hover:bg-slate-800 font-medium"><Plus size={18} /> Tambah Barang</button>
+                        <button onClick={() => handlePrint('stock')} className="flex-1 md:flex-none items-center justify-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2.5 rounded-lg font-medium flex"><Printer size={16} /> Cetak PDF</button>
+                        <button onClick={() => { setFormMode('add'); setFormData({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: '', deskripsi: '', foto: '' }); setIsFormModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-lg hover:bg-slate-800 font-medium"><Plus size={18} /> Tambah Barang</button>
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse min-w-[800px]">
+                      <table className="w-full text-left border-collapse min-w-[900px]">
                         <thead>
                           <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-600">
-                            <th className="p-4 font-medium">Barang & Kategori</th><th className="p-4 font-medium">Harga Modal</th><th className="p-4 font-medium">Harga Jual</th><th className="p-4 font-medium text-center">Stok</th><th className="p-4 font-medium text-center">Aksi (Manual)</th>
+                            <th className="p-4 font-medium w-16">Foto</th>
+                            <th className="p-4 font-medium">Barang & Kategori</th>
+                            <th className="p-4 font-medium">Harga Modal</th>
+                            <th className="p-4 font-medium">Harga Jual</th>
+                            <th className="p-4 font-medium text-center">Stok</th>
+                            <th className="p-4 font-medium text-center">Aksi (Manual)</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
                           {filteredItems.map(item => (
                             <tr key={item.id} className="hover:bg-slate-50 group">
-                              <td className="p-4"><p className="font-medium text-slate-800">{item.nama}</p><div className="flex items-center gap-2 text-xs text-slate-500 mt-1"><span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700">{item.kategori}</span><span>Ukuran: <strong className="text-slate-700">{item.ukuran}</strong></span></div></td>
+                              <td className="p-4">
+                                <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200">
+                                  {item.foto ? <img src={item.foto} alt="pic" className="w-full h-full object-cover" /> : <ImageIcon size={20} className="text-slate-300"/>}
+                                </div>
+                              </td>
+                              <td className="p-4">
+                                <p className="font-medium text-slate-800">{item.nama}</p>
+                                <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                                  <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700">{item.kategori}</span>
+                                  <span>Ukuran: <strong className="text-slate-700">{item.ukuran}</strong></span>
+                                </div>
+                              </td>
                               <td className="p-4 text-slate-600">{formatRupiah(item.hargaModal || 0)}</td>
                               <td className="p-4 text-slate-800 font-medium">{formatRupiah(item.hargaJual || 0)}</td>
                               <td className="p-4 text-center"><span className={`inline-block min-w-[3rem] px-2.5 py-1 rounded-full text-xs font-bold ${item.stok > 10 ? 'bg-green-100 text-green-700' : item.stok > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{item.stok}</span></td>
                               <td className="p-4">
-                                <div className="flex items-center justify-center gap-2">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button onClick={() => setDetailItem(item)} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded" title="Lihat Detail"><Info size={16} /></button>
                                   <button onClick={() => { setTrxData({ itemId: item.id, nama: item.nama, type: 'in', qty: 1, price: 0 }); setIsTrxModalOpen(true); }} className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded" title="Catat Masuk Gudang"><ArrowDownCircle size={14} /> Masuk</button>
-                                  <button onClick={() => { setFormMode('edit'); setFormData({...item, hargaJual: Number(item.hargaJual) || 0, hargaModal: Number(item.hargaModal) || 0}); setIsFormModalOpen(true); }} className="p-2 text-slate-400 hover:text-orange-600"><Edit2 size={16} /></button>
+                                  <button onClick={() => { setFormMode('edit'); setFormData({...item, hargaJual: Number(item.hargaJual) || '', hargaModal: Number(item.hargaModal) || ''}); setIsFormModalOpen(true); }} className="p-2 text-slate-400 hover:text-orange-600"><Edit2 size={16} /></button>
                                   <button onClick={() => setItemToDelete(item)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
                                 </div>
                               </td>
@@ -605,41 +632,76 @@
             )}
           </div>
 
-          {/* --- MODALS --- */}
+          {/* --- MODALS FORM TAMBAH/EDIT --- */}
           {isFormModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 print:hidden">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-                <div className="flex justify-between items-center p-5 border-b bg-slate-50"><h2 className="font-bold flex items-center gap-2"><Package className="text-orange-500" size={20}/> {formMode === 'add' ? 'Tambah Master Barang' : 'Edit Barang'}</h2><button onClick={() => setIsFormModalOpen(false)}><X/></button></div>
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 print:hidden overflow-y-auto">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-lg my-8">
+                <div className="flex justify-between items-center p-5 border-b bg-slate-50 sticky top-0"><h2 className="font-bold flex items-center gap-2"><Package className="text-orange-500" size={20}/> {formMode === 'add' ? 'Tambah Master Barang' : 'Edit Barang'}</h2><button onClick={() => setIsFormModalOpen(false)}><X/></button></div>
+                
                 <form onSubmit={handleSaveItem} className="p-5 space-y-4">
-                  <input type="text" required className="w-full p-2 border rounded" value={formData.nama} onChange={(e) => setFormData({...formData, nama: e.target.value})} placeholder="Nama Barang" />
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nama Barang *</label>
+                    <input type="text" required className="w-full p-2 border rounded focus:ring-2 focus:ring-orange-500 outline-none" value={formData.nama} onChange={(e) => setFormData({...formData, nama: e.target.value})} placeholder="Kemeja Flanel Vintage" />
+                  </div>
+                  
                   <div className="grid grid-cols-2 gap-4">
-                    <select className="w-full p-2 border rounded" value={formData.kategori} onChange={(e) => setFormData({...formData, kategori: e.target.value, ukuran: e.target.value === 'Celana' ? '30' : 'L'})}>{allKategori.map(k => <option key={k} value={k}>{k}</option>)}</select>
-                    <select className="w-full p-2 border rounded" value={formData.ukuran} onChange={(e) => setFormData({...formData, ukuran: e.target.value})}>{formData.kategori === 'Celana' ? pantsSizes.map(s => <option key={s} value={s}>{s}</option>) : standardSizes.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Kategori *</label>
+                      <select className="w-full p-2 border rounded focus:ring-2 outline-none bg-white" value={formData.kategori} onChange={(e) => setFormData({...formData, kategori: e.target.value, ukuran: e.target.value === 'Celana' ? '30' : 'L'})}>{allKategori.map(k => <option key={k} value={k}>{k}</option>)}</select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Ukuran *</label>
+                      <select className="w-full p-2 border rounded focus:ring-2 outline-none bg-white" value={formData.ukuran} onChange={(e) => setFormData({...formData, ukuran: e.target.value})}>{formData.kategori === 'Celana' ? pantsSizes.map(s => <option key={s} value={s}>{s}</option>) : standardSizes.map(s => <option key={s} value={s}>{s}</option>)}</select>
+                    </div>
                   </div>
+                  
                   <div className="grid grid-cols-3 gap-4">
-                    <input type="number" required className="w-full p-2 border rounded" value={formData.hargaModal} onChange={(e) => setFormData({...formData, hargaModal: e.target.value})} placeholder="Harga Modal" />
-                    <input type="number" required className="w-full p-2 border rounded" value={formData.hargaJual} onChange={(e) => setFormData({...formData, hargaJual: e.target.value})} placeholder="Harga Jual" />
-                    <input type="number" required disabled={formMode === 'edit'} className="w-full p-2 border rounded bg-slate-50 disabled:opacity-50" value={formData.stok} onChange={(e) => setFormData({...formData, stok: e.target.value})} placeholder="Stok Awal"/>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Harga Modal *</label>
+                      <input type="number" required className="w-full p-2 border rounded focus:ring-2 outline-none" value={formData.hargaModal} onChange={(e) => setFormData({...formData, hargaModal: e.target.value})} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Harga Jual *</label>
+                      <input type="number" required className="w-full p-2 border rounded focus:ring-2 outline-none" value={formData.hargaJual} onChange={(e) => setFormData({...formData, hargaJual: e.target.value})} placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Stok Awal *</label>
+                      <input type="number" required disabled={formMode === 'edit'} className="w-full p-2 border rounded bg-slate-50 disabled:opacity-50" value={formData.stok} onChange={(e) => setFormData({...formData, stok: e.target.value})} placeholder="0"/>
+                    </div>
                   </div>
-                  <div className="pt-2 flex gap-3"><button type="button" onClick={() => setIsFormModalOpen(false)} className="flex-1 p-2 border rounded">Batal</button><button type="submit" disabled={isSaving} className="flex-1 p-2 bg-slate-900 text-white rounded flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={16}/> : 'Simpan'}</button></div>
+
+                  <div className="border-t pt-4">
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">URL Foto Gambar (Opsional)</label>
+                    <input type="url" className="w-full p-2 border rounded focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={formData.foto} onChange={(e) => setFormData({...formData, foto: e.target.value})} placeholder="https://contoh.com/gambar.jpg" />
+                    <p className="text-[10px] text-slate-400 mt-1">Masukkan link gambar (berakhiran .jpg / .png). Kosongkan jika tidak ada.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Deskripsi Tambahan (Opsional)</label>
+                    <textarea rows="3" className="w-full p-2 border rounded focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={formData.deskripsi} onChange={(e) => setFormData({...formData, deskripsi: e.target.value})} placeholder="Kondisi barang 90%, warna pudar sedikit..." />
+                  </div>
+
+                  <div className="pt-2 flex gap-3 sticky bottom-0 bg-white"><button type="button" onClick={() => setIsFormModalOpen(false)} className="flex-1 p-2 border rounded font-medium">Batal</button><button type="submit" disabled={isSaving} className="flex-1 p-2 bg-slate-900 text-white font-medium rounded flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={16}/> : 'Simpan Barang'}</button></div>
                 </form>
               </div>
             </div>
           )}
 
+          {/* MODAL TRANSAKSI MASUK (MANUAL) */}
           {isTrxModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 print:hidden">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
                 <div className="p-4 bg-green-600 text-white flex justify-between"><h2 className="font-bold flex items-center gap-2"><ArrowDownCircle size={20}/> Barang Masuk</h2><button onClick={() => setIsTrxModalOpen(false)}><X/></button></div>
                 <form onSubmit={handleSaveTransaction} className="p-5 space-y-4">
                   <div className="font-bold bg-slate-50 p-2 border rounded">{trxData.nama}</div>
-                  <input type="number" min="1" required className="w-full p-2 border rounded" value={trxData.qty} onChange={(e) => setTrxData({...trxData, qty: e.target.value})} placeholder="Jumlah Barang Masuk" />
+                  <input type="number" min="1" required className="w-full p-2 border rounded focus:ring-2 outline-none" value={trxData.qty} onChange={(e) => setTrxData({...trxData, qty: e.target.value})} placeholder="Jumlah Barang Masuk" />
                   <button type="submit" disabled={isSaving} className="w-full p-2.5 bg-green-600 text-white rounded font-bold flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={16}/> : 'Konfirmasi Masuk'}</button>
                 </form>
               </div>
             </div>
           )}
 
+          {/* MODAL HAPUS BARANG */}
           {itemToDelete && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 print:hidden">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden p-6 text-center">
@@ -647,8 +709,49 @@
                 <h3 className="text-lg font-bold text-slate-800 mb-2">Hapus Item?</h3>
                 <p className="text-slate-500 text-sm mb-6">Yakin menghapus <strong>{itemToDelete.nama}</strong>?</p>
                 <div className="flex gap-3">
-                  <button onClick={() => setItemToDelete(null)} className="flex-1 py-2 bg-slate-100 text-slate-700 rounded-lg">Batal</button>
-                  <button onClick={handleDeleteItem} disabled={isSaving} className="flex-1 py-2 bg-red-600 text-white rounded-lg flex justify-center items-center">{isSaving ? <Loader2 className="animate-spin" size={16}/> : 'Hapus'}</button>
+                  <button onClick={() => setItemToDelete(null)} className="flex-1 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg">Batal</button>
+                  <button onClick={handleDeleteItem} disabled={isSaving} className="flex-1 py-2 bg-red-600 text-white font-medium rounded-lg flex justify-center items-center">{isSaving ? <Loader2 className="animate-spin" size={16}/> : 'Hapus'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* MODAL DETAIL BARANG (BACA DESKRIPSI & FOTO BESAR) */}
+          {detailItem && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm print:hidden" onClick={() => setDetailItem(null)}>
+              <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
+                <div className="relative h-64 bg-slate-100 flex items-center justify-center border-b">
+                  {detailItem.foto ? (
+                    <img src={detailItem.foto} alt={detailItem.nama} className="w-full h-full object-cover" />
+                  ) : (
+                    <ImageIcon size={64} className="text-slate-300" />
+                  )}
+                  <button onClick={() => setDetailItem(null)} className="absolute top-4 right-4 bg-black/50 hover:bg-black/70 text-white p-1.5 rounded-full backdrop-blur-md transition-colors"><X size={20}/></button>
+                </div>
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-2">
+                    <h2 className="text-xl font-bold text-slate-900 leading-tight pr-4">{detailItem.nama}</h2>
+                    <span className="bg-slate-100 px-2 py-1 text-xs font-bold rounded text-slate-600 whitespace-nowrap">{detailItem.kategori}</span>
+                  </div>
+                  <p className="text-sm font-medium text-slate-500 mb-4">Ukuran: {detailItem.ukuran}</p>
+                  
+                  <div className="grid grid-cols-2 gap-4 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Harga Jual</p>
+                      <p className="font-bold text-slate-800">{formatRupiah(detailItem.hargaJual)}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">Sisa Stok</p>
+                      <p className={`font-bold ${Number(detailItem.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>{detailItem.stok} Pcs</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">Deskripsi Barang</p>
+                    <div className="text-sm text-slate-600 bg-white border border-slate-200 p-3 rounded-lg min-h-[80px] whitespace-pre-wrap">
+                      {detailItem.deskripsi ? detailItem.deskripsi : <span className="italic text-slate-400">Tidak ada deskripsi.</span>}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
