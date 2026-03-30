@@ -6,15 +6,15 @@
   <title>Orlando Garage Store - POS & Inventory</title>
   
   <!-- Polyfill untuk Safari/iPad OS lama agar mengenali importmap -->
-  <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js" crossorigin="anonymous"></script>
+  <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
   
-  <!-- Menggunakan Tailwind versi 3.3.0 yang kompatibel dengan WebKit/Safari lama -->
-  <script src="https://cdn.tailwindcss.com/3.3.0" crossorigin="anonymous"></script>
+  <!-- Menggunakan Tailwind (tanpa crossorigin agar tidak diblokir GitHub Pages) -->
+  <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- Babel Standalone untuk membaca JSX -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
-  <!-- Fallback CSS agar gambar tidak raksasa jika CDN gagal/lambat dimuat -->
+  <!-- Fallback CSS -->
   <style>
     img, video { max-width: 100%; height: auto; }
     svg { max-width: 100%; }
@@ -39,12 +39,11 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useMemo } from 'react';
     import { createRoot } from 'react-dom/client';
-    // Menggunakan ikon Search biasa untuk kompatibilitas versi
-    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag, ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
+    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag, ChevronLeft, ChevronRight, Calendar, SearchCode } from 'lucide-react';
 
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEQJ00rfoWu8XnRCTgj1DFwzOtxJWU50iBumUUV9M6dPKhmhWsg9hgyytj-q1ljlgx7w/exec'; 
 
-    // --- Fungsi Aman untuk Storage (Menghindari Crash Iframe/CORS) ---
+    // --- Fungsi Aman untuk Storage ---
     const getSessionSafe = (key) => {
       try { return window.sessionStorage.getItem(key); } catch (e) { return null; }
     };
@@ -77,7 +76,6 @@
       const [activeTab, setActiveTab] = useState('pos');
       const [searchTerm, setSearchTerm] = useState('');
       const [invFilter, setInvFilter] = useState({ kategori: 'Semua', ukuran: 'Semua', sort: 'default' });
-      // Filter Transaksi Diperbarui
       const [trxFilter, setTrxFilter] = useState({ type: 'Semua', startDate: '', endDate: '', searchId: '' });
       
       // Paginasi Riwayat Transaksi
@@ -202,7 +200,7 @@
         const actualPrice = isOut ? Number(trxData.price) : 0;
         const costPrice = Number(item.hargaModal) || 0;
         const now = new Date().toISOString();
-        const receiptId = 'TRX' + Date.now().toString().slice(-6); // Gawe ID Transaksi kagem trx manual
+        const receiptId = 'TRX' + Date.now().toString().slice(-6); 
 
         const trxPayload = {
           id: receiptId, itemId: item.id, itemName: `${item.nama} (${item.ukuran})`, type: trxData.type, quantity: qty,
@@ -240,7 +238,6 @@
         const now = new Date().toISOString();
         const trxs = [];
         const invUpdates = [];
-        // Gawe 1 ID Nota kanggo kabeh item ing cart
         const receiptId = 'TRX' + Date.now().toString().slice(-6); 
 
         cart.forEach(item => {
@@ -249,7 +246,7 @@
           const costPrice = Number(item.hargaModal) || 0;
           
           trxs.push({
-            id: receiptId, // Kabeh item diwenehi ID sing padha
+            id: receiptId, 
             itemId: item.id, itemName: `${item.nama} (${item.ukuran})`, type: 'out', quantity: item.qty,
             costPrice: costPrice, price: actualPrice, totalValue: actualPrice * item.qty, profit: (actualPrice - costPrice) * item.qty,
             date: now, cashier: activeUser, customerName: customerName, customerPhone: customerPhone
@@ -297,7 +294,7 @@
         return result;
       }, [items, searchTerm, invFilter]);
 
-      // FILTER TRANSAKSI (Type, Date Range, No Nota)
+      // FILTER TRANSAKSI
       const filteredTransactions = useMemo(() => {
         let result = transactions;
         if (trxFilter.type !== 'Semua') result = result.filter(t => t.type === (trxFilter.type === 'Masuk' ? 'in' : 'out'));
