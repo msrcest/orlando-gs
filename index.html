@@ -5,10 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Orlando Garage Store - POS & Inventory</title>
   
-  <!-- Polyfill untuk Safari/iPad OS lama agar mengenali importmap -->
+  <!-- Polyfill untuk Safari/iPad OS lama -->
   <script async src="https://unpkg.com/es-module-shims@1.8.0/dist/es-module-shims.js"></script>
   
-  <!-- Menggunakan Tailwind (tanpa versi spesifik agar bebas CORS di GitHub Pages) -->
+  <!-- Menggunakan Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   
   <!-- Babel Standalone untuk membaca JSX -->
@@ -39,9 +39,8 @@
   <script type="text/babel" data-type="module">
     import React, { useState, useEffect, useMemo } from 'react';
     import { createRoot } from 'react-dom/client';
-    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag, ChevronLeft, ChevronRight, Calendar, SearchCode } from 'lucide-react';
+    import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag, ChevronLeft, ChevronRight, Calendar, SearchCode, FileText, Tags, PlusSquare } from 'lucide-react';
 
-    
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEQJ00rfoWu8XnRCTgj1DFwzOtxJWU50iBumUUV9M6dPKhmhWsg9hgyytj-q1ljlgx7w/exec'; 
 
     // --- Fungsi Aman untuk Storage ---
@@ -56,12 +55,12 @@
     };
 
     function App() {
-      // Data Master saking Spreadsheet
+      // Data Master
       const [usersList, setUsersList] = useState([]);
       const [items, setItems] = useState([]);
       const [transactions, setTransactions] = useState([]);
       
-      // State Aplikasi & Loading
+      // State Aplikasi
       const [initialLoading, setInitialLoading] = useState(true);
       const [isSaving, setIsSaving] = useState(false); 
       const [toast, setToast] = useState(null); 
@@ -74,12 +73,11 @@
       const [activeUser, setActiveUser] = useState(() => getSessionSafe('orlando_user') || '');
 
       // Nav & Filter
-      const [activeTab, setActiveTab] = useState('pos');
+      const [activeTab, setActiveTab] = useState('pos'); // Tabs: pos, penjualan, sku, inventory, transactions, dashboard
       const [searchTerm, setSearchTerm] = useState('');
       const [invFilter, setInvFilter] = useState({ kategori: 'Semua', ukuran: 'Semua', sort: 'default' });
       const [trxFilter, setTrxFilter] = useState({ type: 'Semua', startDate: '', endDate: '', searchId: '' });
       
-      // Paginasi Riwayat Transaksi
       const [currentPage, setCurrentPage] = useState(1);
       const ITEMS_PER_PAGE = 50;
 
@@ -89,16 +87,18 @@
       const [customerName, setCustomerName] = useState('');
       const [customerPhone, setCustomerPhone] = useState('');
       
-      // Print & Modal
+      // Print & Modals
       const [printMode, setPrintMode] = useState(null);
       const [receiptData, setReceiptData] = useState(null);
+      
+      // Modal SKU
       const [isFormModalOpen, setIsFormModalOpen] = useState(false);
       const [formMode, setFormMode] = useState('add');
-      const [formData, setFormData] = useState({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: '', deskripsi: '', foto: '' });
-      const [isTrxModalOpen, setIsTrxModalOpen] = useState(false);
-      const [trxData, setTrxData] = useState({ itemId: '', nama: '', type: 'in', qty: 1, price: 0 });
+      const [formData, setFormData] = useState({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: 0, deskripsi: '', foto: '' });
+      
+      // Modal Barang Masuk (Inventori)
+      const [stockInModal, setStockInModal] = useState({ isOpen: false, itemId: '', qty: '' });
       const [itemToDelete, setItemToDelete] = useState(null);
-      const [detailItem, setDetailItem] = useState(null);
 
       const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
@@ -134,7 +134,6 @@
         fetchData();
       }, []);
 
-      // --- FUNGSI POST MENYANG GOOGLE SHEETS ---
       const sendDataToSheet = async (payload) => {
         setIsSaving(true);
         try {
@@ -158,8 +157,7 @@
         const foundUser = usersList.find(u => String(u.username).toLowerCase() === inputUser.toLowerCase() && String(u.pass) === loginPassword);
         if (foundUser) {
           setIsLoggedIn(true); setActiveUser(foundUser.Nama); setLoginError('');
-          setSessionSafe('orlando_auth', 'true'); 
-          setSessionSafe('orlando_user', foundUser.Nama);
+          setSessionSafe('orlando_auth', 'true'); setSessionSafe('orlando_user', foundUser.Nama);
         } else {
           setLoginError('Username utawi password klentu!');
         }
@@ -167,50 +165,51 @@
 
       const handleAppLogout = () => {
         setIsLoggedIn(false); setActiveUser(''); setLoginUsername(''); setLoginPassword('');
-        removeSessionSafe('orlando_auth'); 
-        removeSessionSafe('orlando_user');
+        removeSessionSafe('orlando_auth'); removeSessionSafe('orlando_user');
       };
 
-      // --- CRUD INVENTORI ---
-      const handleSaveItem = async (e) => {
+      // --- CRUD SKU (MASTER BARANG) ---
+      const handleSaveSKU = async (e) => {
         e.preventDefault();
         const payload = {
           id: formMode === 'add' ? generateId() : formData.id,
           nama: formData.nama, kategori: formData.kategori, ukuran: formData.ukuran,
-          hargaModal: Number(formData.hargaModal), hargaJual: Number(formData.hargaJual), stok: Number(formData.stok),
+          hargaModal: Number(formData.hargaModal), hargaJual: Number(formData.hargaJual), 
+          stok: formMode === 'add' ? 0 : Number(formData.stok), // Jika baru = 0, jika edit pertahankan stok
           deskripsi: formData.deskripsi || '', foto: formData.foto || '', updatedAt: new Date().toISOString()
         };
         await sendDataToSheet({ action: 'saveItem', payload: payload });
         setIsFormModalOpen(false);
+        showToast('SKU Master kasil dipun simpen!', 'success');
       };
 
       const handleDeleteItem = async () => {
         if (!itemToDelete) return;
         await sendDataToSheet({ action: 'deleteItem', id: itemToDelete.id });
         setItemToDelete(null);
+        showToast('Barang kasil dipun busek!', 'success');
       };
 
-      const handleSaveTransaction = async (e) => {
+      // --- BARANG MASUK (TAMBAH STOK) ---
+      const handleStockInSubmit = async (e) => {
         e.preventDefault();
-        const item = items.find(i => i.id === trxData.itemId);
-        if (!item) return;
-        const qty = Number(trxData.qty);
-        if (trxData.type === 'out' && Number(item.stok) < qty) { showToast("Stok boten nyekapi!"); return; }
+        const item = items.find(i => i.id === stockInModal.itemId);
+        if (!item || !stockInModal.qty) return;
 
-        const isOut = trxData.type === 'out';
-        const actualPrice = isOut ? Number(trxData.price) : 0;
+        const qty = Number(stockInModal.qty);
         const costPrice = Number(item.hargaModal) || 0;
         const now = new Date().toISOString();
-        const receiptId = 'TRX' + Date.now().toString().slice(-6); 
+        const receiptId = 'IN' + Date.now().toString().slice(-6); 
 
         const trxPayload = {
-          id: receiptId, itemId: item.id, itemName: `${item.nama} (${item.ukuran})`, type: trxData.type, quantity: qty,
-          costPrice: costPrice, price: actualPrice, totalValue: isOut ? (actualPrice * qty) : 0, profit: isOut ? ((actualPrice - costPrice) * qty) : 0, 
+          id: receiptId, itemId: item.id, itemName: `${item.nama} (${item.ukuran})`, type: 'in', quantity: qty,
+          costPrice: costPrice, price: 0, totalValue: 0, profit: 0, 
           date: now, cashier: activeUser, customerName: '', customerPhone: ''
         };
-        const newStok = trxData.type === 'in' ? (Number(item.stok) + qty) : (Number(item.stok) - qty);
+        const newStok = Number(item.stok) + qty;
         await sendDataToSheet({ action: 'saveTransaction', transaction: trxPayload, inventoryUpdate: { id: item.id, newStok: newStok }});
-        setIsTrxModalOpen(false);
+        setStockInModal({ isOpen: false, itemId: '', qty: '' });
+        showToast('Stok kasil dipun tambah!', 'success');
       };
 
       // --- FUNGSI KASIR (CHECKOUT) ---
@@ -229,6 +228,7 @@
       const updateCartQty = (itemId, delta) => { setCart(prev => prev.map(i => { if (i.id === itemId) { const newQty = i.qty + delta; if (newQty > Number(i.stok) || newQty < 1) return i; return { ...i, qty: newQty }; } return i; })); };
       const updateCartDiscount = (itemId, value) => { let val = Number(value); if (val < 0) val = 0; if (val > 100) val = 100; setCart(prev => prev.map(i => i.id === itemId ? { ...i, discount: val } : i)); };
       const removeFromCart = (itemId) => setCart(prev => prev.filter(i => i.id !== itemId));
+      
       const cartTotal = cart.reduce((sum, i) => { const discMultiplier = 1 - (i.discount || 0) / 100; return sum + ((Number(i.hargaJual) || 0) * discMultiplier * i.qty); }, 0);
       
       const handleCheckout = async () => {
@@ -266,6 +266,30 @@
         handlePrint('receipt');
       };
 
+      // --- FUNGSI CETAK ULANG FAKTUR ---
+      const handleReprintInvoice = (invoiceId) => {
+        const invoiceTrxs = transactions.filter(t => t.id === invoiceId && t.type === 'out');
+        if (invoiceTrxs.length === 0) return;
+
+        const firstTrx = invoiceTrxs[0];
+        const total = invoiceTrxs.reduce((sum, t) => sum + (Number(t.totalValue) || 0), 0);
+
+        const mappedItems = invoiceTrxs.map(t => ({
+          nama: t.itemName.split(' (')[0] || t.itemName,
+          ukuran: t.itemName.match(/\(([^)]+)\)/)?.[1] || '-',
+          qty: t.quantity,
+          hargaJual: t.price, 
+          discount: 0 
+        }));
+
+        setReceiptData({
+          id: firstTrx.id, date: firstTrx.date, items: mappedItems, total: total, 
+          paid: total, change: 0, cashier: firstTrx.cashier, customerName: firstTrx.customerName || ''
+        });
+
+        handlePrint('receipt');
+      };
+
       const handlePrint = (mode) => { setPrintMode(mode); setTimeout(() => { window.print(); setPrintMode(null); }, 1000); };
       
       const formatRupiah = (num) => {
@@ -295,7 +319,6 @@
         return result;
       }, [items, searchTerm, invFilter]);
 
-      // FILTER TRANSAKSI
       const filteredTransactions = useMemo(() => {
         let result = transactions;
         if (trxFilter.type !== 'Semua') result = result.filter(t => t.type === (trxFilter.type === 'Masuk' ? 'in' : 'out'));
@@ -305,23 +328,32 @@
         if (trxFilter.startDate) {
           const sDate = new Date(trxFilter.startDate);
           sDate.setHours(0,0,0,0);
-          result = result.filter(t => {
-            if (!t.date) return false;
-            return new Date(t.date) >= sDate;
-          });
+          result = result.filter(t => t.date && new Date(t.date) >= sDate);
         }
         if (trxFilter.endDate) {
           const eDate = new Date(trxFilter.endDate);
           eDate.setHours(23,59,59,999);
-          result = result.filter(t => {
-            if (!t.date) return false;
-            return new Date(t.date) <= eDate;
-          });
+          result = result.filter(t => t.date && new Date(t.date) <= eDate);
         }
         return result;
       }, [transactions, trxFilter]);
 
-      // PAGINASI TRANSAKSI
+      // MENGELOMPOKKAN FAKTUR PENJUALAN (Kagem Tab Penjualan)
+      const invoicesList = useMemo(() => {
+        const sales = transactions.filter(t => t.type === 'out');
+        const groups = {};
+        sales.forEach(t => {
+          if (!groups[t.id]) {
+            groups[t.id] = {
+              id: t.id, date: t.date, cashier: t.cashier, customerName: t.customerName, totalItems: 0, totalValue: 0
+            };
+          }
+          groups[t.id].totalItems += Number(t.quantity);
+          groups[t.id].totalValue += (Number(t.totalValue) || 0);
+        });
+        return Object.values(groups).sort((a,b) => new Date(b.date) - new Date(a.date));
+      }, [transactions]);
+
       const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE));
       const displayedTransactions = filteredTransactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
@@ -395,7 +427,7 @@
           <div className={`min-h-screen bg-slate-50 font-sans text-slate-800 relative flex flex-col ${printMode ? 'hidden' : 'block'}`}>
             
             {toast && (
-              <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-red-600 text-white">
+              <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 bg-green-600 text-white">
                 <AlertCircle size={20} />
                 <span className="font-medium text-sm">{toast.message}</span>
                 <button onClick={() => setToast(null)} className="p-1 hover:bg-black/20 rounded-lg ml-2"><X size={16}/></button>
@@ -424,19 +456,22 @@
                   <button onClick={handleAppLogout} className="md:hidden p-2 text-slate-400 hover:text-red-400"><LogOut size={20} /></button>
                 </div>
                 
-                <div className="flex items-center gap-4 w-full md:w-auto overflow-x-auto hide-scrollbar">
+                <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto hide-scrollbar">
                   <div className="flex bg-slate-800 rounded-lg p-1 w-full md:w-auto">
-                    <button onClick={() => setActiveTab('pos')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'pos' ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><ShoppingCart size={16} /> Kasir (POS)</button>
-                    <button onClick={() => setActiveTab('inventory')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'inventory' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><List size={16} /> Inventori</button>
-                    <button onClick={() => { setActiveTab('transactions'); setCurrentPage(1); }} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'transactions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><History size={16} /> Riwayat</button>
-                    <button onClick={() => setActiveTab('dashboard')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><BarChart2 size={16} /> Analisis</button>
+                    <button onClick={() => setActiveTab('pos')} className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'pos' ? 'bg-orange-500 text-white shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><ShoppingCart size={16} /> Kasir</button>
+                    <button onClick={() => setActiveTab('penjualan')} className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'penjualan' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><Receipt size={16} /> Penjualan</button>
+                    <button onClick={() => setActiveTab('sku')} className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'sku' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><Tags size={16} /> Katalog SKU</button>
+                    <button onClick={() => setActiveTab('inventory')} className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'inventory' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><List size={16} /> Inventori</button>
+                    <button onClick={() => { setActiveTab('transactions'); setCurrentPage(1); }} className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'transactions' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><History size={16} /> Riwayat</button>
+                    <button onClick={() => setActiveTab('dashboard')} className={`flex items-center justify-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-1 md:flex-none ${activeTab === 'dashboard' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-300 hover:text-white hover:bg-slate-700'}`}><BarChart2 size={16} /> Analisis</button>
                   </div>
-                  <button onClick={handleAppLogout} className="hidden md:flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-red-400 transition-colors border border-transparent hover:border-red-400/30 rounded-lg bg-slate-800/50"><LogOut size={16} /> Medal</button>
+                  <button onClick={handleAppLogout} className="hidden md:flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:text-red-400 transition-colors border border-transparent hover:border-red-400/30 rounded-lg bg-slate-800/50 shrink-0"><LogOut size={16} /> Medal</button>
                 </div>
               </div>
             </nav>
 
             <main className="max-w-7xl mx-auto p-4 sm:p-6 space-y-6 mt-2 flex-1 w-full pb-10">
+              
               {/* --- TAB KASIR (POS) --- */}
               {activeTab === 'pos' && (
                 <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -451,18 +486,16 @@
                       </select>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4 h-[calc(100vh-250px)] overflow-y-auto pb-6 pr-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 overflow-y-auto pb-10 pr-1" style={{ maxHeight: 'calc(100vh - 180px)' }}>
                       {filteredItems.map(item => (
                         <div key={item.id} onClick={() => addToCart(item)} className={`bg-white rounded-xl border overflow-hidden cursor-pointer transition-all hover:shadow-md flex flex-col ${Number(item.stok) > 0 ? 'border-slate-200 hover:border-orange-500' : 'border-red-100 opacity-60 grayscale'}`}>
-                          
-                          {/* Gambar Thumbnail (Diperbaiki agar tidak menyempit) */}
-                          <div className="h-36 sm:h-40 w-full shrink-0 bg-slate-100 relative border-b border-slate-100">
-                            {item.foto && (
+                          {/* Gambar Thumbnail (Diperbaiki dengan aspect-square) */}
+                          <div className="w-full aspect-square bg-slate-100 relative shrink-0">
+                            {item.foto ? (
                               <img src={item.foto} alt={item.nama} className="absolute inset-0 w-full h-full object-cover z-10" onError={(e) => { e.target.style.display = 'none'; }} />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center text-slate-300 z-0"><ImageIcon size={32} /></div>
                             )}
-                            <div className="absolute inset-0 flex items-center justify-center text-slate-300 z-0">
-                              <ImageIcon size={32} />
-                            </div>
                             {Number(item.stok) === 0 && (
                               <div className="absolute inset-0 bg-white/60 flex items-center justify-center backdrop-blur-[1px] z-20">
                                 <span className="bg-red-600 text-white font-bold text-xs px-2 py-1 rounded">TELAS</span>
@@ -470,22 +503,24 @@
                             )}
                           </div>
 
-                          <div className="p-3 flex-1 flex flex-col">
-                            <div className="text-[10px] text-slate-500 mb-1 flex justify-between items-center">
-                              <span className="bg-slate-100 px-1.5 py-0.5 rounded">{item.kategori}</span>
-                              <span className={`font-bold ${Number(item.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>{item.stok} Pcs</span>
+                          <div className="p-2 sm:p-3 flex-1 flex flex-col justify-between">
+                            <div>
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">{item.kategori}</span>
+                                <span className={`text-[10px] font-bold ${Number(item.stok) > 0 ? 'text-green-600' : 'text-red-500'}`}>Stok: {item.stok}</span>
+                              </div>
+                              <h3 className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-2 leading-tight" title={item.nama}>{item.nama}</h3>
+                              <p className="text-[10px] text-blue-600 font-semibold mt-0.5">Ukr: {item.ukuran}</p>
+                              {item.deskripsi && <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight mt-1" title={item.deskripsi}>{item.deskripsi}</p>}
                             </div>
-                            <h3 className="font-bold text-slate-800 text-xs sm:text-sm line-clamp-1" title={item.nama}>{item.nama}</h3>
-                            <p className="text-[10px] text-blue-600 font-semibold mb-1">Ukuran: {item.ukuran}</p>
-                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-tight mb-2 flex-1" title={item.deskripsi}>{item.deskripsi || 'Boten wonten katrangan'}</p>
-                            <p className="font-black text-slate-900 mt-auto">{formatRupiah(item.hargaJual)}</p>
+                            <p className="font-black text-slate-900 mt-2">{formatRupiah(item.hargaJual)}</p>
                           </div>
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  <div className="w-full lg:w-[400px] bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col h-[calc(100vh-160px)] sticky top-24">
+                  <div className="w-full lg:w-[400px] bg-white rounded-xl shadow-lg border border-slate-200 flex flex-col h-[calc(100vh-160px)] sticky top-24 shrink-0">
                     <div className="p-4 border-b border-slate-100 bg-slate-50 rounded-t-xl flex justify-between items-center"><h2 className="font-bold text-slate-800 flex items-center gap-2"><ShoppingCart size={18}/> Keranjang</h2><span className="bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">{cart.length} Item</span></div>
                     
                     <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -550,34 +585,82 @@
                 </div>
               )}
 
-              {/* --- TAB INVENTORI --- */}
-              {activeTab === 'inventory' && (
+              {/* --- TAB PENJUALAN (DAFTAR FAKTUR) --- */}
+              {activeTab === 'penjualan' && (
+                <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col flex-1">
+                  <div className="p-4 border-b border-slate-100 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div>
+                      <h2 className="font-bold text-slate-800 text-lg">Daftar Faktur Sadeyan</h2>
+                      <p className="text-sm text-slate-500">Gunggung: {invoicesList.length} faktur</p>
+                    </div>
+                    <button onClick={fetchData} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200 flex items-center gap-2">⟳ Reload Data</button>
+                  </div>
+
+                  <div className="overflow-x-auto w-full">
+                    <table className="w-full text-left border-collapse min-w-[800px]">
+                      <thead className="sticky top-0 bg-slate-50 shadow-sm z-0">
+                        <tr className="border-b border-slate-200 text-sm text-slate-600">
+                          <th className="p-4 font-medium">No. Faktur (Nota)</th>
+                          <th className="p-4 font-medium">Tanggal & Wekdal</th>
+                          <th className="p-4 font-medium">Kasir</th>
+                          <th className="p-4 font-medium">Pelanggan</th>
+                          <th className="p-4 font-medium text-center">Total Item</th>
+                          <th className="p-4 font-medium text-right">Gunggung Rergi</th>
+                          <th className="p-4 font-medium text-center">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {invoicesList.length === 0 ? (
+                           <tr><td colSpan="7" className="p-8 text-center text-slate-500">Dereng wonten faktur sadeyan.</td></tr>
+                        ) : (
+                          invoicesList.map(inv => (
+                            <tr key={inv.id} className="hover:bg-slate-50">
+                              <td className="p-4 font-bold text-slate-800">#{inv.id}</td>
+                              <td className="p-4 text-sm text-slate-600">{formatDate(inv.date)}</td>
+                              <td className="p-4 text-sm text-slate-600 capitalize">{inv.cashier}</td>
+                              <td className="p-4 text-sm text-slate-600">{inv.customerName || '-'}</td>
+                              <td className="p-4 text-center font-bold text-slate-700">{inv.totalItems}</td>
+                              <td className="p-4 text-right font-bold text-green-700">{formatRupiah(inv.totalValue)}</td>
+                              <td className="p-4 text-center">
+                                <button onClick={() => handleReprintInvoice(inv.id)} className="bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1 mx-auto">
+                                  <Printer size={14} /> Cetak Ulang
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* --- TAB KATALOG SKU (MASTER BARANG) --- */}
+              {activeTab === 'sku' && (
                 <div className="space-y-4">
                   <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                       <div className="relative w-full md:w-96">
                         <Search size={18} className="absolute inset-y-0 left-3 top-3 text-slate-400" />
-                        <input type="text" placeholder="Padosi barang..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                        <input type="text" placeholder="Padosi Master SKU..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                       </div>
                       <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                        <button onClick={fetchData} className="flex-1 md:flex-none items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-lg font-medium flex" title="Muat Ulang Data">⟳ Refresh</button>
-                        <button onClick={() => handlePrint('stock')} className="flex-1 md:flex-none items-center justify-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2.5 rounded-lg font-medium flex"><Printer size={16} /> Cithak PDF</button>
-                        <button onClick={() => { setFormMode('add'); setFormData({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: '', deskripsi: '', foto: '' }); setIsFormModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-lg hover:bg-slate-800 font-medium"><Plus size={18} /> Tambah Master Barang</button>
+                        <button onClick={fetchData} className="flex-1 md:flex-none items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-lg font-medium flex">⟳ Refresh</button>
+                        <button onClick={() => { setFormMode('add'); setFormData({ id: '', nama: '', kategori: 'Kaos', ukuran: 'L', hargaModal: '', hargaJual: '', stok: 0, deskripsi: '', foto: '' }); setIsFormModalOpen(true); }} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-lg hover:bg-slate-800 font-medium"><Plus size={18} /> Tambah SKU</button>
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                    <div className="overflow-x-auto">
+                    <div className="overflow-x-auto w-full">
                       <table className="w-full text-left border-collapse min-w-[900px]">
-                        <thead>
-                          <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-600">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-sm text-slate-600">
+                          <tr>
                             <th className="p-4 font-medium w-16">Foto</th>
-                            <th className="p-4 font-medium">Barang & Kategori</th>
+                            <th className="p-4 font-medium">SKU Barang & Kategori</th>
                             <th className="p-4 font-medium">Rergi Modal</th>
                             <th className="p-4 font-medium">Rergi Sadeyan</th>
-                            <th className="p-4 font-medium text-center">Stok</th>
-                            <th className="p-4 font-medium text-center">Aksi (Manual)</th>
+                            <th className="p-4 font-medium text-center">Aksi Master</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -585,28 +668,80 @@
                             <tr key={item.id} className="hover:bg-slate-50 group">
                               <td className="p-4">
                                 <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200 relative shrink-0">
-                                  {item.foto && (
-                                    <img src={item.foto} alt="pic" className="w-full h-full object-cover absolute inset-0 z-10" onError={(e) => { e.target.style.display = 'none'; }} />
-                                  )}
+                                  {item.foto && <img src={item.foto} alt="pic" className="w-full h-full object-cover absolute inset-0 z-10" onError={(e) => { e.target.style.display = 'none'; }} />}
                                   <ImageIcon size={20} className="text-slate-300 absolute z-0"/>
                                 </div>
                               </td>
                               <td className="p-4">
-                                <p className="font-medium text-slate-800">{item.nama}</p>
+                                <p className="font-bold text-slate-800">{item.nama}</p>
                                 <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
                                   <span className="bg-slate-100 px-2 py-0.5 rounded text-slate-700">{item.kategori}</span>
-                                  <span>Ukuran: <strong className="text-slate-700">{item.ukuran}</strong></span>
+                                  <span>Ukr: <strong className="text-slate-700">{item.ukuran}</strong></span>
                                 </div>
+                                {item.deskripsi && <p className="text-[10px] text-slate-400 mt-1 line-clamp-1 max-w-xs">{item.deskripsi}</p>}
                               </td>
                               <td className="p-4 text-slate-600">{formatRupiah(item.hargaModal || 0)}</td>
-                              <td className="p-4 text-slate-800 font-medium">{formatRupiah(item.hargaJual || 0)}</td>
-                              <td className="p-4 text-center"><span className={`inline-block min-w-[3rem] px-2.5 py-1 rounded-full text-xs font-bold ${item.stok > 10 ? 'bg-green-100 text-green-700' : item.stok > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{item.stok}</span></td>
+                              <td className="p-4 text-slate-800 font-bold">{formatRupiah(item.hargaJual || 0)}</td>
                               <td className="p-4">
                                 <div className="flex items-center justify-center gap-1.5">
-                                  <button onClick={() => setDetailItem(item)} className="p-2 text-slate-400 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded" title="Lihat Detail"><Info size={16} /></button>
-                                  <button onClick={() => { setTrxData({ itemId: item.id, nama: item.nama, type: 'in', qty: 1, price: 0 }); setIsTrxModalOpen(true); }} className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded" title="Catat Masuk Gudang"><ArrowDownCircle size={14} /> Masuk</button>
-                                  <button onClick={() => { setFormMode('edit'); setFormData({...item, hargaJual: Number(item.hargaJual) || '', hargaModal: Number(item.hargaModal) || '', deskripsi: item.deskripsi || '', foto: item.foto || ''}); setIsFormModalOpen(true); }} className="p-2 text-slate-400 hover:text-orange-600"><Edit2 size={16} /></button>
-                                  <button onClick={() => setItemToDelete(item)} className="p-2 text-slate-400 hover:text-red-600"><Trash2 size={16} /></button>
+                                  <button onClick={() => { setFormMode('edit'); setFormData({...item, hargaJual: Number(item.hargaJual) || '', hargaModal: Number(item.hargaModal) || '', deskripsi: item.deskripsi || '', foto: item.foto || ''}); setIsFormModalOpen(true); }} className="p-2 text-slate-500 hover:text-orange-600 bg-slate-100 hover:bg-orange-50 rounded" title="Edit SKU"><Edit2 size={16} /></button>
+                                  <button onClick={() => setItemToDelete(item)} className="p-2 text-slate-500 hover:text-red-600 bg-slate-100 hover:bg-red-50 rounded" title="Busek SKU"><Trash2 size={16} /></button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* --- TAB INVENTORI --- */}
+              {activeTab === 'inventory' && (
+                <div className="space-y-4">
+                  <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <div className="relative w-full md:w-96">
+                        <Search size={18} className="absolute inset-y-0 left-3 top-3 text-slate-400" />
+                        <input type="text" placeholder="Padosi barang ing gudhang..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                        <button onClick={fetchData} className="flex-1 md:flex-none items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-lg font-medium flex">⟳ Refresh</button>
+                        <button onClick={() => handlePrint('stock')} className="flex-1 md:flex-none items-center justify-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2.5 rounded-lg font-medium flex"><Printer size={16} /> Cithak Laporan PDF</button>
+                        <button onClick={() => setStockInModal({ isOpen: true, itemId: '', qty: '' })} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 font-medium shadow-sm"><PlusSquare size={18} /> Tambah Stok Lebet</button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                    <div className="overflow-x-auto w-full">
+                      <table className="w-full text-left border-collapse min-w-[800px]">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-200 text-sm text-slate-600">
+                            <th className="p-4 font-medium">Barang & Kategori</th>
+                            <th className="p-4 font-medium">Ukuran</th>
+                            <th className="p-4 font-medium text-center">Stok (Fisik)</th>
+                            <th className="p-4 font-medium text-center">Aksi</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredItems.map(item => (
+                            <tr key={item.id} className="hover:bg-slate-50 group">
+                              <td className="p-4">
+                                <p className="font-bold text-slate-800">{item.nama}</p>
+                                <span className="bg-slate-100 px-2 py-0.5 rounded text-xs text-slate-700 mt-1 inline-block">{item.kategori}</span>
+                              </td>
+                              <td className="p-4 font-bold text-slate-700">{item.ukuran}</td>
+                              <td className="p-4 text-center">
+                                <span className={`inline-block min-w-[3rem] px-3 py-1.5 rounded-full text-sm font-black ${item.stok > 10 ? 'bg-green-100 text-green-700' : item.stok > 0 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                                  {item.stok}
+                                </span>
+                              </td>
+                              <td className="p-4">
+                                <div className="flex items-center justify-center gap-1.5">
+                                  <button onClick={() => setDetailItem(item)} className="p-2 text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 rounded flex items-center gap-1 text-xs font-bold" title="Lihat Detail"><Info size={14} /> Info</button>
+                                  <button onClick={() => setStockInModal({ isOpen: true, itemId: item.id, qty: '' })} className="flex items-center gap-1 px-3 py-2 text-xs font-bold text-green-700 bg-green-50 hover:bg-green-100 rounded" title="Catat Masuk Gudang"><ArrowDownCircle size={14} /> + Stok</button>
                                 </div>
                               </td>
                             </tr>
@@ -623,7 +758,7 @@
                 <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col flex-1">
                   <div className="p-4 border-b border-slate-100 bg-white flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                     <div>
-                      <h2 className="font-bold text-slate-800 text-lg">Riwayat Transaksi</h2>
+                      <h2 className="font-bold text-slate-800 text-lg">Riwayat Log Transaksi</h2>
                       <p className="text-sm text-slate-500">Gunggung: {filteredTransactions.length} cathetan</p>
                     </div>
                     
@@ -645,14 +780,11 @@
                          <input type="date" className="bg-transparent text-xs py-1.5 outline-none w-24" value={trxFilter.endDate} onChange={(e) => {setTrxFilter({...trxFilter, endDate: e.target.value}); setCurrentPage(1);}} title="Ngantos Tanggal" />
                          {(trxFilter.startDate || trxFilter.endDate) && <button onClick={() => {setTrxFilter({...trxFilter, startDate: '', endDate: ''}); setCurrentPage(1);}} className="ml-1 text-slate-400 hover:text-red-500"><X size={14}/></button>}
                       </div>
-
-                      <button onClick={fetchData} className="px-4 h-[38px] bg-slate-100 text-slate-700 rounded-lg font-medium hover:bg-slate-200">⟳ Reload</button>
-                      <button onClick={() => handlePrint('sales')} className="flex items-center gap-2 bg-indigo-600 text-white hover:bg-indigo-700 px-4 h-[38px] rounded-lg font-medium"><Download size={16} /> PDF</button>
                     </div>
                   </div>
                   
                   <div className="overflow-x-auto w-full">
-                    <table className="w-full text-left border-collapse min-w-[800px]">
+                    <table className="w-full text-left border-collapse min-w-[900px]">
                       <thead className="sticky top-0 bg-slate-50 shadow-sm z-0">
                         <tr className="border-b border-slate-200 text-sm text-slate-600">
                           <th className="p-4 font-medium">Wekdal & Nota</th><th className="p-4 font-medium">Tipe</th><th className="p-4 font-medium">Barang (Ukr)</th><th className="p-4 font-medium">Kasir / Pelanggan</th><th className="p-4 font-medium text-center">Qty</th><th className="p-4 font-medium text-right">Rergi Total</th><th className="p-4 font-medium text-right">Bathèn</th>
@@ -757,7 +889,7 @@
             </main>
 
             {/* --- FOOTER APLIKASI --- */}
-            <footer className="mt-auto py-4 bg-white border-t border-slate-200 text-center">
+            <footer className="mt-auto py-4 bg-white border-t border-slate-200 text-center shrink-0">
               <p className="text-sm font-bold text-slate-400">Mas Jenggot App</p>
             </footer>
           </div>
@@ -845,16 +977,16 @@
             </div>
           )}
 
-          {/* --- MODALS FORM TAMBAH/EDIT --- */}
+          {/* --- MODALS FORM SKU (TAMBAH/EDIT) --- */}
           {!printMode && isFormModalOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 overflow-y-auto">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-xl my-8">
-                <div className="flex justify-between items-center p-5 border-b bg-slate-50 sticky top-0 z-10"><h2 className="font-bold flex items-center gap-2"><Package className="text-orange-500" size={20}/> {formMode === 'add' ? 'Tambah Master Barang' : 'Edit Barang'}</h2><button onClick={() => setIsFormModalOpen(false)}><X/></button></div>
+                <div className="flex justify-between items-center p-5 border-b bg-slate-50 sticky top-0 z-10"><h2 className="font-bold flex items-center gap-2"><Tags className="text-slate-800" size={20}/> {formMode === 'add' ? 'Tambah SKU Enggal' : 'Edit SKU'}</h2><button onClick={() => setIsFormModalOpen(false)}><X/></button></div>
                 
-                <form onSubmit={handleSaveItem} className="p-5 space-y-4">
+                <form onSubmit={handleSaveSKU} className="p-5 space-y-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nami Barang *</label>
-                    <input type="text" required className="w-full p-2.5 border rounded focus:ring-2 focus:ring-orange-500 outline-none" value={formData.nama} onChange={(e) => setFormData({...formData, nama: e.target.value})} placeholder="Kemeja Flanel Vintage" />
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nami Barang / SKU *</label>
+                    <input type="text" required className="w-full p-2.5 border rounded focus:ring-2 focus:ring-slate-900 outline-none" value={formData.nama} onChange={(e) => setFormData({...formData, nama: e.target.value})} placeholder="Tuladha: Kemeja Flanel Vintage" />
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
@@ -868,7 +1000,7 @@
                     </div>
                   </div>
                   
-                  <div className="grid grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rergi Modal *</label>
                       <input type="number" required className="w-full p-2.5 border rounded focus:ring-2 outline-none" value={formData.hargaModal} onChange={(e) => setFormData({...formData, hargaModal: e.target.value})} placeholder="0" />
@@ -877,41 +1009,46 @@
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rergi Sadeyan *</label>
                       <input type="number" required className="w-full p-2.5 border rounded focus:ring-2 outline-none" value={formData.hargaJual} onChange={(e) => setFormData({...formData, hargaJual: e.target.value})} placeholder="0" />
                     </div>
-                    <div>
-                      <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Stok Wiwitan *</label>
-                      <input type="number" required disabled={formMode === 'edit'} className="w-full p-2.5 border rounded bg-slate-50 disabled:opacity-50" value={formData.stok} onChange={(e) => setFormData({...formData, stok: e.target.value})} placeholder="0"/>
-                    </div>
                   </div>
 
                   <div className="border-t border-slate-100 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Katrangan / Deskripsi</label>
-                      <textarea rows="4" className="w-full p-2.5 border rounded focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={formData.deskripsi} onChange={(e) => setFormData({...formData, deskripsi: e.target.value})} placeholder="Lebetaken katrangan (opsional)..." />
+                      <textarea rows="4" className="w-full p-2.5 border rounded focus:ring-2 focus:ring-slate-900 outline-none text-sm" value={formData.deskripsi} onChange={(e) => setFormData({...formData, deskripsi: e.target.value})} placeholder="Lebetaken katrangan (opsional)..." />
                     </div>
                     <div>
                       <label className="block text-xs font-bold text-slate-500 uppercase mb-1">URL Foto Gambar</label>
-                      <input type="url" className="w-full p-2.5 border rounded focus:ring-2 focus:ring-orange-500 outline-none text-sm mb-2" value={formData.foto} onChange={(e) => setFormData({...formData, foto: e.target.value})} placeholder="https://contoh.com/gambar.jpg" />
+                      <input type="url" className="w-full p-2.5 border rounded focus:ring-2 focus:ring-slate-900 outline-none text-sm mb-2" value={formData.foto} onChange={(e) => setFormData({...formData, foto: e.target.value})} placeholder="https://contoh.com/gambar.jpg" />
                       <div className="bg-slate-50 p-3 rounded border border-slate-100 text-xs text-slate-500">
                         Priksani url gambar ingkang dipun lebetaken pungkasanipun wujud tipe gambar (kados .jpg / .png).<br/><br/><i>Kosongaken kemawon manawi boten wonten foto.</i>
                       </div>
                     </div>
                   </div>
 
-                  <div className="pt-2 flex gap-3"><button type="button" onClick={() => setIsFormModalOpen(false)} className="flex-1 p-3 border rounded font-bold text-slate-600 hover:bg-slate-50">Batal</button><button type="submit" disabled={isSaving} className="flex-1 p-3 bg-slate-900 text-white font-bold rounded flex justify-center items-center gap-2 hover:bg-slate-800 shadow-sm">{isSaving ? <Loader2 className="animate-spin" size={18}/> : 'Simpen Barang'}</button></div>
+                  <div className="pt-2 flex gap-3"><button type="button" onClick={() => setIsFormModalOpen(false)} className="flex-1 p-3 border rounded font-bold text-slate-600 hover:bg-slate-50">Batal</button><button type="submit" disabled={isSaving} className="flex-1 p-3 bg-slate-900 text-white font-bold rounded flex justify-center items-center gap-2 hover:bg-slate-800 shadow-sm">{isSaving ? <Loader2 className="animate-spin" size={18}/> : 'Simpen SKU'}</button></div>
                 </form>
               </div>
             </div>
           )}
 
-          {/* MODAL TRANSAKSI MASUK (MANUAL) */}
-          {!printMode && isTrxModalOpen && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60">
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden">
-                <div className="p-4 bg-green-600 text-white flex justify-between"><h2 className="font-bold flex items-center gap-2"><ArrowDownCircle size={20}/> Barang Lebet</h2><button onClick={() => setIsTrxModalOpen(false)}><X/></button></div>
-                <form onSubmit={handleSaveTransaction} className="p-5 space-y-4">
-                  <div className="font-bold bg-slate-50 p-2 border rounded">{trxData.nama}</div>
-                  <input type="number" min="1" required className="w-full p-2 border rounded focus:ring-2 outline-none" value={trxData.qty} onChange={(e) => setTrxData({...trxData, qty: e.target.value})} placeholder="Gunggung Barang Lebet" />
-                  <button type="submit" disabled={isSaving} className="w-full p-2.5 bg-green-600 text-white rounded font-bold flex justify-center items-center gap-2">{isSaving ? <Loader2 className="animate-spin" size={16}/> : 'Konfirmasi Lebet'}</button>
+          {/* MODAL BARANG MASUK (INVENTORI) */}
+          {!printMode && stockInModal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 overflow-y-auto">
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md my-8 overflow-hidden">
+                <div className="p-4 bg-green-600 text-white flex justify-between items-center"><h2 className="font-bold flex items-center gap-2"><ArrowDownCircle size={20}/> Tambah Stok Lebet</h2><button onClick={() => setStockInModal({isOpen: false, itemId: '', qty: ''})}><X/></button></div>
+                <form onSubmit={handleStockInSubmit} className="p-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Pilih SKU / Barang *</label>
+                    <select required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 outline-none bg-white font-medium" value={stockInModal.itemId} onChange={(e) => setStockInModal({...stockInModal, itemId: e.target.value})}>
+                      <option value="" disabled>-- Pilih Barang --</option>
+                      {items.map(i => <option key={i.id} value={i.id}>{i.nama} (Ukr: {i.ukuran}) - Stok saat ini: {i.stok}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Gunggung Barang (Qty) *</label>
+                    <input type="number" min="1" required className="w-full p-3 border border-slate-300 rounded-lg focus:ring-2 outline-none font-bold text-lg" value={stockInModal.qty} onChange={(e) => setStockInModal({...stockInModal, qty: e.target.value})} placeholder="Contoh: 10" />
+                  </div>
+                  <button type="submit" disabled={isSaving || !stockInModal.itemId} className="w-full mt-4 p-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-300 text-white rounded-lg font-bold flex justify-center items-center gap-2 shadow-sm">{isSaving ? <Loader2 className="animate-spin" size={18}/> : 'Simpen Stok Lebet'}</button>
                 </form>
               </div>
             </div>
@@ -922,8 +1059,8 @@
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60">
               <div className="bg-white rounded-xl shadow-xl w-full max-w-sm overflow-hidden p-6 text-center">
                 <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><AlertCircle size={32} /></div>
-                <h3 className="text-lg font-bold text-slate-800 mb-2">Busek Item?</h3>
-                <p className="text-slate-500 text-sm mb-6">Yektos badhe mbusek <strong>{itemToDelete.nama}</strong>?</p>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">Busek SKU?</h3>
+                <p className="text-slate-500 text-sm mb-6">Yektos badhe mbusek <strong>{itemToDelete.nama}</strong> saking katalog?</p>
                 <div className="flex gap-3">
                   <button onClick={() => setItemToDelete(null)} className="flex-1 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg">Batal</button>
                   <button onClick={handleDeleteItem} disabled={isSaving} className="flex-1 py-2 bg-red-600 text-white font-medium rounded-lg flex justify-center items-center">{isSaving ? <Loader2 className="animate-spin" size={16}/> : 'Busek'}</button>
@@ -932,7 +1069,7 @@
             </div>
           )}
 
-          {/* MODAL DETAIL BARANG (BACA DESKRIPSI & FOTO BESAR) */}
+          {/* MODAL DETAIL BARANG */}
           {!printMode && detailItem && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm" onClick={() => setDetailItem(null)}>
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden" onClick={e => e.stopPropagation()}>
