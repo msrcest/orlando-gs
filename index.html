@@ -41,9 +41,6 @@
     import { createRoot } from 'react-dom/client';
     import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag, ChevronLeft, ChevronRight, Calendar, SearchCode, FileText, Tags, PlusSquare } from 'lucide-react';
 
-    // =========================================================================
-    // PENTING: MASUKKAN URL WEB APP GOOGLE APPS SCRIPT ANDA DI BAWAH INI !!!
-    // =========================================================================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEQJ00rfoWu8XnRCTgj1DFwzOtxJWU50iBumUUV9M6dPKhmhWsg9hgyytj-q1ljlgx7w/exec'; 
 
     // --- Fungsi Aman untuk Storage ---
@@ -385,8 +382,15 @@
         const dailyTrend = []; let maxDailyRev = 0;
         for (let i = 29; i >= 0; i--) {
           const d = new Date(); d.setDate(d.getDate() - i);
-          const dateStr = d.toISOString().split('T')[0];
-          const dayRev = sales.filter(t => t.date && t.date.startsWith(dateStr)).reduce((sum, t) => sum + (Number(t.totalValue) || 0), 0);
+          
+          const dayRev = sales.filter(t => {
+            if (!t.date) return false;
+            const tDate = new Date(t.date);
+            return tDate.getFullYear() === d.getFullYear() && 
+                   tDate.getMonth() === d.getMonth() && 
+                   tDate.getDate() === d.getDate();
+          }).reduce((sum, t) => sum + (Number(t.totalValue) || 0), 0);
+          
           if (dayRev > maxDailyRev) maxDailyRev = dayRev;
           dailyTrend.push({ date: d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' }), rev: dayRev });
         }
@@ -846,12 +850,15 @@
                  <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm">
                    <h3 className="font-bold mb-4 flex items-center gap-2"><BarChart2 className="text-blue-600"/> Trend Omzet 30 Dinten</h3>
                    <div className="h-48 flex items-end gap-1 overflow-x-auto pb-2">
-                     {dashboardStats.dailyTrend.map((day, idx) => (
-                       <div key={idx} className="flex-1 flex flex-col justify-end items-center group min-w-[20px]">
-                         <div className={`w-full rounded-t-sm transition-all duration-500 ${(day.rev / dashboardStats.maxDailyRev * 100) > 0 ? 'bg-blue-500' : 'bg-transparent'}`} style={{ height: `${Math.max((day.rev / dashboardStats.maxDailyRev * 100), 2)}%` }}></div>
-                         <span className="text-[10px] text-slate-400 mt-1 hidden sm:block">{idx % 3 === 0 ? day.date.split(' ')[0] : ''}</span>
-                       </div>
-                     ))}
+                     {dashboardStats.dailyTrend.map((day, idx) => {
+                       const heightPct = dashboardStats.maxDailyRev > 0 ? (day.rev / dashboardStats.maxDailyRev * 100) : 0;
+                       return (
+                         <div key={idx} className="flex-1 flex flex-col justify-end items-center group min-w-[20px]" title={`${day.date}: ${formatRupiah(day.rev)}`}>
+                           <div className={`w-full rounded-t-sm transition-all duration-500 ${heightPct > 0 ? 'bg-blue-500 hover:bg-blue-600' : 'bg-slate-200'}`} style={{ height: `${Math.max(heightPct, 2)}%` }}></div>
+                           <span className="text-[10px] text-slate-400 mt-1 hidden sm:block">{idx % 3 === 0 ? day.date.split(' ')[0] : ''}</span>
+                         </div>
+                       );
+                     })}
                    </div>
                  </div>
 
