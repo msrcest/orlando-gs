@@ -41,6 +41,9 @@
     import { createRoot } from 'react-dom/client';
     import { Package, Search, Plus, Edit2, Trash2, X, AlertCircle, DollarSign, Layers, ArrowDownCircle, ArrowUpCircle, BarChart2, TrendingUp, History, List, Filter, Printer, Download, ShoppingCart, Minus, Receipt, Lock, User, LogOut, Loader2, Image as ImageIcon, Info, Tag, ChevronLeft, ChevronRight, Calendar, SearchCode, FileText, Tags, PlusSquare } from 'lucide-react';
 
+    // =========================================================================
+    // PENTING: MASUKKAN URL WEB APP GOOGLE APPS SCRIPT ANDA DI BAWAH INI !!!
+    // =========================================================================
     const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzEQJ00rfoWu8XnRCTgj1DFwzOtxJWU50iBumUUV9M6dPKhmhWsg9hgyytj-q1ljlgx7w/exec'; 
 
     // --- Fungsi Aman untuk Storage ---
@@ -99,6 +102,8 @@
       // Modal Barang Masuk (Inventori)
       const [stockInModal, setStockInModal] = useState({ isOpen: false, itemId: '', qty: '' });
       const [itemToDelete, setItemToDelete] = useState(null);
+      // PERBAIKAN: Menambahkan state detailItem yang sebelumnya hilang
+      const [detailItem, setDetailItem] = useState(null);
 
       const generateId = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
 
@@ -707,7 +712,7 @@
                         <input type="text" placeholder="Padosi barang ing gudhang..." className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-slate-900 outline-none" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                       </div>
                       <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-                        <button onClick={fetchData} className="flex-1 md:flex-none items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-lg font-medium flex">⟳ Refresh</button>
+                        <button onClick={fetchData} className="flex-1 md:flex-none items-center justify-center gap-2 bg-slate-100 text-slate-700 hover:bg-slate-200 px-4 py-2.5 rounded-lg font-medium flex" title="Muat Ulang Data">⟳ Refresh</button>
                         <button onClick={() => handlePrint('stock')} className="flex-1 md:flex-none items-center justify-center gap-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 px-4 py-2.5 rounded-lg font-medium flex"><Printer size={16} /> Cithak Laporan PDF</button>
                         <button onClick={() => setStockInModal({ isOpen: true, itemId: '', qty: '' })} className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 font-medium shadow-sm"><PlusSquare size={18} /> Tambah Stok Lebet</button>
                       </div>
